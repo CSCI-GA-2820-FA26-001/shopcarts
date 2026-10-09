@@ -15,15 +15,15 @@
 ######################################################################
 
 """
-YourResourceModel Service
+Shopcart Service
 
 This service implements a REST API that allows you to Create, Read, Update
-and Delete YourResourceModel
+and Delete Shopcarts and the Items in them
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
-from service.models import YourResourceModel
+from service.models import Shopcart
 from service.common import status  # HTTP Status Codes
 
 
@@ -43,4 +43,41 @@ def index():
 #  R E S T   A P I   E N D P O I N T S
 ######################################################################
 
-# Todo: Place your REST API code here ...
+
+######################################################################
+# CREATE A NEW SHOPCART
+######################################################################
+@app.route("/shopcarts", methods=["POST"])
+def create_shopcarts():
+    """
+    Create a Shopcart
+
+    This endpoint will create a Shopcart, and any Items sent with it,
+    based on the data in the body that is posted
+    """
+    app.logger.info("Request to create a Shopcart")
+    check_content_type("application/json")
+
+    shopcart = Shopcart()
+    shopcart.deserialize(request.get_json())
+    shopcart.create()
+    app.logger.info("Shopcart with id [%s] saved!", shopcart.id)
+
+    # Todo: use url_for("get_shopcarts", ...) once GET /shopcarts/<id> (#5) exists
+    location_url = f"/shopcarts/{shopcart.id}"
+    return jsonify(shopcart.serialize()), status.HTTP_201_CREATED, {"Location": location_url}
+
+
+######################################################################
+#  U T I L I T Y   F U N C T I O N S
+######################################################################
+
+
+def check_content_type(content_type):
+    """Checks that the media type is correct"""
+    if request.mimetype != content_type:
+        app.logger.error("Invalid Content-Type: %s", request.headers.get("Content-Type"))
+        abort(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Content-Type must be {content_type}",
+        )
