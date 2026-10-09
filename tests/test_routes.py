@@ -30,6 +30,14 @@ from service.models import db, Shopcart, Item
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
+BASE_URL = "/shopcarts"
+
+
+def make_item(**overrides):
+    """Returns a valid Item payload, with any fields overridden"""
+    data = {"product_id": 1001, "name": "Vinyl record", "quantity": 2, "price": 24.99}
+    data.update(overrides)
+    return data
 
 
 ######################################################################
@@ -65,6 +73,16 @@ class TestYourResourceService(TestCase):
     def tearDown(self):
         """This runs after each test"""
         db.session.remove()
+
+    ######################################################################
+    #  H E L P E R   M E T H O D S
+    ######################################################################
+
+    def _create_shopcart(self, user_id=1):
+        """Creates a Shopcart directly in the database"""
+        shopcart = Shopcart(user_id=user_id)
+        shopcart.create()
+        return shopcart
 
     ######################################################################
     #  P L A C E   T E S T   C A S E S   H E R E
@@ -593,3 +611,76 @@ class TestYourResourceService(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), [])
+
+    ######################################################################
+    #  A D D   I T E M   T O   S H O P C A R T   (#9)
+    ######################################################################
+
+    def test_add_item(self):
+        """It should Add an Item to a Shopcart"""
+        shopcart = self._create_shopcart()
+        payload = make_item()
+        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        data = resp.get_json()
+        self.assertIsNotNone(data["id"])
+        self.assertEqual(data["shopcart_id"], shopcart.id)
+        self.assertEqual(data["product_id"], payload["product_id"])
+        self.assertEqual(data["name"], payload["name"])
+        self.assertEqual(data["quantity"], payload["quantity"])
+        self.assertAlmostEqual(float(data["price"]), payload["price"])
+
+        location = resp.headers.get("Location")
+        self.assertTrue(location.endswith(f"/shopcarts/{shopcart.id}/items/{data['id']}"))
+
+        found = Shopcart.find(shopcart.id)
+        self.assertEqual(len(found.items), 1)
+        self.assertEqual(found.items[0].id, data["id"])
+
+    def test_add_item_shopcart_not_found(self):
+        """It should not Add an Item to a Shopcart that does not exist"""
+        resp = self.client.post(f"{BASE_URL}/0/items", json=make_item())
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(db.session.query(Item).count(), 0)
+
+    def test_add_item_missing_product_id(self):
+        """It should not Add an Item without a product_id"""
+        shopcart = self._create_shopcart()
+        payload = make_item()
+        del payload["product_id"]
+        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=payload)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(db.session.query(Item).count(), 0)
+
+    def test_add_item_bad_quantity(self):
+        """It should not Add an Item with a quantity of zero or less"""
+        shopcart = self._create_shopcart()
+        for quantity in (0, -5):
+            with self.subTest(quantity=quantity):
+                resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=make_item(quantity=quantity))
+                self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(db.session.query(Item).count(), 0)
+
+    def test_add_item_bad_price(self):
+        """It should not Add an Item with a negative price"""
+        shopcart = self._create_shopcart()
+        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=make_item(price=-1))
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(db.session.query(Item).count(), 0)
+
+    def test_add_item_uses_url_shopcart(self):
+        """It should put the Item in the Shopcart from the URL, not the body"""
+        first = self._create_shopcart(user_id=1)
+        second = self._create_shopcart(user_id=2)
+        payload = make_item(shopcart_id=second.id)
+        resp = self.client.post(f"{BASE_URL}/{first.id}/items", json=payload)
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.get_json()["shopcart_id"], first.id)
+        self.assertEqual(len(Shopcart.find(second.id).items), 0)
+
+    def test_add_item_wrong_content_type(self):
+        """It should not Add an Item with the wrong Content-Type"""
+        shopcart = self._create_shopcart()
+        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", data="name=x", content_type="text/html")
+        self.assertEqual(resp.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
