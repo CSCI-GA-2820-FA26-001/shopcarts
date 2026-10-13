@@ -134,8 +134,8 @@ class Item(db.Model, PersistentBase):
         """
         Deserializes an Item from a dictionary
 
-        The shopcart_id is optional because the Shopcart usually sets it,
-        and it is only changed when it is sent.
+        id and shopcart_id are ignored: the Shopcart or the URL sets the
+        shopcart_id, and an Item can not be moved to another Shopcart.
 
         Args:
             data (dict): A dictionary containing the resource data
@@ -162,21 +162,21 @@ class Item(db.Model, PersistentBase):
             raise DataValidationError(
                 "Invalid Item: quantity must be a positive integer"
             )
-        if (
-            isinstance(price, bool)
-            or not isinstance(price, (int, float, Decimal))
-            or price < 0
-        ):
+        if isinstance(price, bool) or not isinstance(price, (int, float, Decimal)):
+            raise DataValidationError(
+                "Invalid Item: price must be a non-negative number"
+            )
+        price = Decimal(str(price))
+        # JSON allows NaN and Infinity, which are not valid prices
+        if not price.is_finite() or price < 0:
             raise DataValidationError(
                 "Invalid Item: price must be a non-negative number"
             )
 
-        if "shopcart_id" in data:
-            self.shopcart_id = data["shopcart_id"]
         self.product_id = product_id
         self.name = name
         self.quantity = quantity
-        self.price = Decimal(str(price))
+        self.price = price
         return self
 
 

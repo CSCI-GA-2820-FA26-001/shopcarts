@@ -363,23 +363,33 @@ class TestItemModel(TestModelBase):
 
     def test_deserialize_item(self):
         """It should Deserialize an Item"""
-        item = Item().deserialize(make_item_data(shopcart_id=5))
-        self.assertEqual(item.shopcart_id, 5)
+        item = Item().deserialize(make_item_data())
         self.assertEqual(item.product_id, 1001)
         self.assertEqual(item.name, "Vinyl record")
         self.assertEqual(item.quantity, 2)
         self.assertEqual(item.price, Decimal("24.99"))
 
-    def test_deserialize_item_keeps_shopcart(self):
-        """It should keep the Item's shopcart_id when the data does not include one"""
+    def test_deserialize_item_ignores_shopcart_id(self):
+        """It should not move an Item to another Shopcart through deserialize"""
         item = ItemFactory()
         item.create()
         shopcart_id = item.shopcart_id
-        item.deserialize(make_item_data(quantity=9))
+        other = ShopcartFactory()
+        other.create()
+
+        item.deserialize(make_item_data(quantity=9, shopcart_id=other.id))
         item.update()
         found = Item.find(item.id)
         self.assertEqual(found.shopcart_id, shopcart_id)
         self.assertEqual(found.quantity, 9)
+        self.assertEqual(len(Shopcart.find(other.id).items), 0)
+
+    def test_deserialize_shopcart_items_ignore_shopcart_id(self):
+        """It should link nested Items to their own Shopcart"""
+        data = {"user_id": 7, "items": [make_item_data(shopcart_id=999999)]}
+        shopcart = Shopcart().deserialize(data)
+        shopcart.create()
+        self.assertEqual(Shopcart.find(shopcart.id).items[0].shopcart_id, shopcart.id)
 
     def test_deserialize_item_free(self):
         """It should Deserialize an Item with a price of zero"""
@@ -406,7 +416,9 @@ class TestItemModel(TestModelBase):
 
     def test_deserialize_item_bad_price(self):
         """It should not Deserialize an Item with an invalid price"""
-        for price in (-0.01, "abc", "24.99", True, None):
+        bad_prices = (-0.01, "abc", "24.99", True, None)
+        not_finite = (float("nan"), float("inf"), float("-inf"), Decimal("NaN"))
+        for price in bad_prices + not_finite:
             with self.subTest(price=price):
                 self.assertRaises(
                     DataValidationError, Item().deserialize, make_item_data(price=price)
