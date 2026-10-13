@@ -74,4 +74,204 @@ class TestYourResourceService(TestCase):
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
-    # Todo: Add your test cases here...
+    def test_create_shopcart(self):
+        """It should Create a Shopcart"""
+        payload = {"user_id": 123}
+
+        response = self.client.post("/shopcarts", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        data = response.get_json()
+        self.assertIsNotNone(data["id"])
+        self.assertEqual(data["user_id"], 123)
+        self.assertEqual(data["items"], [])
+
+        self.assertIn("Location", response.headers)
+        self.assertTrue(
+            response.headers["Location"].endswith(f"/shopcarts/{data['id']}")
+        )
+
+        shopcart = Shopcart.find(data["id"])
+        self.assertIsNotNone(shopcart)
+        self.assertEqual(shopcart.user_id, 123)
+
+    def test_create_shopcart_with_items(self):
+        """It should Create a Shopcart with initial Items"""
+        payload = {
+            "user_id": 123,
+            "items": [
+                {
+                    "product_id": 1001,
+                    "name": "Product A",
+                    "quantity": 2,
+                    "price": 24.99,
+                }
+            ],
+        }
+
+        response = self.client.post("/shopcarts", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        data = response.get_json()
+        self.assertEqual(len(data["items"]), 1)
+
+        item = data["items"][0]
+        self.assertIsNotNone(item["id"])
+        self.assertEqual(item["shopcart_id"], data["id"])
+        self.assertEqual(item["product_id"], 1001)
+        self.assertEqual(item["quantity"], 2)
+
+        saved_cart = Shopcart.find(data["id"])
+        self.assertIsNotNone(saved_cart)
+        self.assertEqual(len(saved_cart.items), 1)
+
+    def test_create_shopcart_missing_user_id(self):
+        """It should not Create a Shopcart without a user_id"""
+        payload = {"items": []}
+
+        response = self.client.post("/shopcarts", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(len(Shopcart.all()), 0)
+
+    def test_create_shopcart_invalid_quantity(self):
+        """It should reject a Shopcart with an invalid Item quantity"""
+        for quantity in (0, -1):
+            with self.subTest(quantity=quantity):
+                payload = {
+                    "user_id": 123,
+                    "items": [
+                        {
+                            "product_id": 1001,
+                            "name": "Product A",
+                            "quantity": quantity,
+                            "price": 24.99,
+                        }
+                    ],
+                }
+
+                response = self.client.post("/shopcarts", json=payload)
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(len(Shopcart.all()), 0)
+                self.assertEqual(len(Item.all()), 0)
+
+    def test_create_shopcart_negative_price(self):
+        """It should reject a Shopcart with a negative Item price"""
+        payload = {
+            "user_id": 123,
+            "items": [
+                {
+                    "product_id": 1001,
+                    "name": "Product A",
+                    "quantity": 2,
+                    "price": -10.00,
+                }
+            ],
+        }
+
+        response = self.client.post("/shopcarts", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(len(Shopcart.all()), 0)
+        self.assertEqual(len(Item.all()), 0)
+
+    def test_create_shopcart_atomicity(self):
+        """It should not persist a Shopcart when one Item is invalid"""
+        payload = {
+            "user_id": 123,
+            "items": [
+                {
+                    "product_id": 1001,
+                    "name": "Valid Product",
+                    "quantity": 2,
+                    "price": 24.99,
+                },
+                {
+                    "product_id": 1002,
+                    "name": "Invalid Product",
+                    "quantity": 0,
+                    "price": 15.00,
+                },
+            ],
+        }
+
+        response = self.client.post("/shopcarts", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(len(Shopcart.all()), 0)
+        self.assertEqual(len(Item.all()), 0)
+
+    def test_create_empty_shopcart(self):
+        """It should Create a Shopcart with an empty Items list"""
+        payload = {
+            "user_id": 123,
+            "items": [],
+        }
+
+        response = self.client.post("/shopcarts", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        data = response.get_json()
+        self.assertIsNotNone(data["id"])
+        self.assertEqual(data["user_id"], 123)
+        self.assertEqual(data["items"], [])
+
+        self.assertIn("Location", response.headers)
+        self.assertTrue(
+            response.headers["Location"].endswith(f"/shopcarts/{data['id']}")
+        )
+
+        saved_cart = Shopcart.find(data["id"])
+        self.assertIsNotNone(saved_cart)
+        self.assertEqual(len(saved_cart.items), 0)
+
+    def test_create_shopcart_invalid_json(self):
+        """It should reject malformed JSON"""
+        response = self.client.post(
+            "/shopcarts",
+            data='{"user_id":',
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.get_json()["error"], "Bad Request")
+        self.assertEqual(len(Shopcart.all()), 0)
+
+    def test_create_shopcart_unsupported_media_type(self):
+        """It should reject a request without JSON content type"""
+        response = self.client.post(
+            "/shopcarts",
+            data='{"user_id": 123}',
+            content_type="text/plain",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+        )
+        self.assertEqual(
+            response.get_json()["error"],
+            "Unsupported media type",
+        )
+        self.assertEqual(len(Shopcart.all()), 0)
+
+    def test_create_shopcart_method_not_allowed(self):
+        """It should reject an unsupported method on the Shopcarts collection"""
+        response = self.client.put(
+            "/shopcarts",
+            json={"user_id": 123},
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+        self.assertEqual(
+            response.get_json()["error"],
+            "Method not Allowed",
+        )
+        self.assertEqual(len(Shopcart.all()), 0)
