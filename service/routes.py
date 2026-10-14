@@ -15,15 +15,15 @@
 ######################################################################
 
 """
-YourResourceModel Service
+Shopcart Service
 
 This service implements a REST API that allows you to Create, Read, Update
-and Delete YourResourceModel
+and Delete Shopcart
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request, url_for
 from flask import current_app as app  # Import Flask application
-from service.models import Shopcart, Item
+from service.models import Shopcart
 from service.common import status  # HTTP Status Codes
 
 
@@ -43,4 +43,24 @@ def index():
 #  R E S T   A P I   E N D P O I N T S
 ######################################################################
 
-# Todo: Place your REST API code here ...
+
+######################################################################
+# CREATE A SHOPCART
+######################################################################
+@app.route("/shopcarts", methods=["POST"])
+def create_shopcart():
+    """Creates a new Shopcart"""
+    app.logger.info("Request to create a Shopcart")
+
+    data = request.get_json()
+    shopcart = Shopcart()
+    shopcart.deserialize(data)
+    shopcart.create()
+
+    location_url = url_for("create_shopcart", _external=True) + f"/{shopcart.id}"
+
+    return (
+        jsonify(shopcart.serialize()),
+        status.HTTP_201_CREATED,
+        {"Location": location_url},
+    )
