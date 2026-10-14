@@ -74,6 +74,65 @@ class TestYourResourceService(TestCase):
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
+    ######################################################################
+    #  R E A D   A   S H O P C A R T   (#5)
+    ######################################################################
+
+    def test_get_shopcart(self):
+        """It should Read a Shopcart"""
+        shopcart = Shopcart(user_id=123)
+        shopcart.create()
+
+        response = self.client.get(f"/shopcarts/{shopcart.id}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(data["id"], shopcart.id)
+        self.assertEqual(data["user_id"], 123)
+        self.assertEqual(data["items"], [])
+        self.assertIsNotNone(data["created_at"])
+        self.assertIsNotNone(data["last_updated"])
+
+    def test_get_shopcart_with_items(self):
+        """It should Read a Shopcart and its Items"""
+        payload = {
+            "user_id": 123,
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+                {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
+            ],
+        }
+        created = self.client.post("/shopcarts", json=payload).get_json()
+
+        response = self.client.get(f"/shopcarts/{created['id']}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(data["id"], created["id"])
+        self.assertEqual(len(data["items"]), 2)
+        self.assertEqual([item["product_id"] for item in data["items"]], [1001, 1002])
+        for item in data["items"]:
+            self.assertEqual(item["shopcart_id"], created["id"])
+
+    def test_get_shopcart_from_location(self):
+        """It should Read a Shopcart at the Location returned by Create"""
+        response = self.client.post("/shopcarts", json={"user_id": 123})
+        location = response.headers["Location"]
+
+        response = self.client.get(location)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json()["user_id"], 123)
+
+    def test_get_shopcart_not_found(self):
+        """It should not Read a Shopcart that does not exist"""
+        response = self.client.get("/shopcarts/0")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        data = response.get_json()
+        self.assertEqual(data["error"], "Not Found")
+        self.assertIn("Shopcart with id '0' could not be found", data["message"])
+
     def test_create_shopcart(self):
         """It should Create a Shopcart"""
         payload = {"user_id": 123}
