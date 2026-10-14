@@ -15,10 +15,10 @@
 ######################################################################
 
 """
-YourResourceModel Service
+Shopcart Service
 
 This service implements a REST API that allows you to Create, Read, Update
-and Delete YourResourceModel
+and Delete Shopcart
 """
 
 from flask import jsonify, request, url_for
