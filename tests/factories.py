@@ -44,4 +44,4 @@ class ItemFactory(Factory):
     name = Faker("word")
     quantity = FuzzyInteger(1, 10)
     price = FuzzyDecimal(0.5, 100.0, 2)
-    shopcart = SubFactory(ShopcartFactory)
+    shopcart = SubFactory(ShopcartFactory, id=None)
