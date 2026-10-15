@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Shopcart
 """
 
-from flask import jsonify, request, url_for
+from flask import jsonify, request, url_for, abort
 from flask import current_app as app  # Import Flask application
 from service.models import Shopcart
 from service.common import status  # HTTP Status Codes
@@ -45,6 +45,25 @@ def index():
 
 
 ######################################################################
+# READ A SHOPCART
+######################################################################
+@app.route("/shopcarts/<int:shopcart_id>", methods=["GET"])
+def get_shopcarts(shopcart_id):
+    """
+    Retrieve a single Shopcart
+
+    This endpoint will return a Shopcart and its Items based on its id
+    """
+    app.logger.info("Request to read a Shopcart with id: %s", shopcart_id)
+
+    shopcart = Shopcart.find(shopcart_id)
+    if not shopcart:
+        abort(status.HTTP_404_NOT_FOUND, f"Shopcart with id '{shopcart_id}' could not be found.")
+
+    return jsonify(shopcart.serialize()), status.HTTP_200_OK
+
+
+######################################################################
 # CREATE A SHOPCART
 ######################################################################
 @app.route("/shopcarts", methods=["POST"])
@@ -57,7 +76,7 @@ def create_shopcart():
     shopcart.deserialize(data)
     shopcart.create()
 
-    location_url = url_for("create_shopcart", _external=True) + f"/{shopcart.id}"
+    location_url = url_for("get_shopcarts", shopcart_id=shopcart.id, _external=True)
 
     return (
         jsonify(shopcart.serialize()),
