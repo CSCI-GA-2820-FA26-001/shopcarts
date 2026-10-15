@@ -23,7 +23,7 @@ and Delete Shopcart
 
 from flask import jsonify, request, url_for, abort
 from flask import current_app as app  # Import Flask application
-from service.models import Shopcart
+from service.models import Shopcart, Item
 from service.common import status  # HTTP Status Codes
 
 
@@ -83,3 +83,23 @@ def create_shopcart():
         status.HTTP_201_CREATED,
         {"Location": location_url},
     )
+
+
+######################################################################
+# ADD AN ITEM
+######################################################################
+@app.route("/shopcarts/<int:shopcart_id>/items", methods=["POST"])
+def add_item(shopcart_id):
+    """Add an item to an existing shopcart."""
+    app.logger.info("Request to add an item")
+    shopcart = Shopcart.find(shopcart_id)
+    if shopcart is None:
+        app.logger.info("Unable to find shopcart")
+        abort(404, description="Shopcart not found")
+    data = request.get_json()
+    item = Item()
+    item.deserialize(data)
+    item.shopcart_id = shopcart_id
+    item.create()
+    location_url = f"/shopcarts/{shopcart_id}/items/{item.id}"
+    return jsonify(item.serialize()), 201, {"Location": location_url}
