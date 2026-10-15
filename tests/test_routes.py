@@ -314,7 +314,9 @@ class TestYourResourceService(TestCase):
         self.assertAlmostEqual(float(data["price"]), payload["price"])
 
         location = resp.headers.get("Location")
-        self.assertTrue(location.endswith(f"/shopcarts/{shopcart.id}/items/{data['id']}"))
+        self.assertTrue(
+            location.endswith(f"/shopcarts/{shopcart.id}/items/{data['id']}")
+        )
 
         found = Shopcart.find(shopcart.id)
         self.assertEqual(len(found.items), 1)
@@ -340,14 +342,18 @@ class TestYourResourceService(TestCase):
         shopcart = self._create_shopcart()
         for quantity in (0, -5):
             with self.subTest(quantity=quantity):
-                resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=make_item(quantity=quantity))
+                resp = self.client.post(
+                    f"{BASE_URL}/{shopcart.id}/items", json=make_item(quantity=quantity)
+                )
                 self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(db.session.query(Item).count(), 0)
 
     def test_add_item_bad_price(self):
         """It should not Add an Item with a negative price"""
         shopcart = self._create_shopcart()
-        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=make_item(price=-1))
+        resp = self.client.post(
+            f"{BASE_URL}/{shopcart.id}/items", json=make_item(price=-1)
+        )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(db.session.query(Item).count(), 0)
 
@@ -364,5 +370,64 @@ class TestYourResourceService(TestCase):
     def test_add_item_wrong_content_type(self):
         """It should not Add an Item with the wrong Content-Type"""
         shopcart = self._create_shopcart()
-        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", data="name=x", content_type="text/html")
+        resp = self.client.post(
+            f"{BASE_URL}/{shopcart.id}/items", data="name=x", content_type="text/html"
+        )
         self.assertEqual(resp.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+
+    def test_delete_item(self):
+        """It should delete an item without deleting its shopcart."""
+
+        shopcart = self._create_shopcart()
+        shopcart_id = shopcart.id
+
+        item = Item()
+        item.deserialize(make_item())
+        item.shopcart_id = shopcart_id
+        item.create()
+        item_id = item.id
+
+        response = self.client.delete(f"{BASE_URL}/{shopcart_id}/items/{item_id}")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.data, b"")
+        self.assertIsNone(Item.find(item_id))
+        self.assertIsNotNone(Shopcart.find(shopcart_id))
+
+    def test_delete_item_shopcart_not_found(self):
+        """It should return 404 when the shopcart does not exist."""
+        response = self.client.delete(f"{BASE_URL}/0/items/1")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_item_not_found(self):
+        """It should return 404 when the item does not exist."""
+        shopcart = self._create_shopcart()
+        shopcart_id = shopcart.id
+
+        response = self.client.delete(f"{BASE_URL}/{shopcart_id}/items/0")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIsNotNone(Shopcart.find(shopcart_id))
+
+    def test_delete_item_wrong_shopcart(self):
+        """It should not delete an item belonging to another shopcart."""
+        first = self._create_shopcart(user_id=1)
+        second = self._create_shopcart(user_id=2)
+        first_id = first.id
+        second_id = second.id
+
+        item = Item()
+        item.deserialize(make_item())
+        item.shopcart_id = second_id
+        item.create()
+        item_id = item.id
+
+        response = self.client.delete(f"{BASE_URL}/{first_id}/items/{item_id}")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        remaining = Item.find(item_id)
+        self.assertIsNotNone(remaining)
+        self.assertEqual(remaining.shopcart_id, second_id)
+        self.assertIsNotNone(Shopcart.find(first_id))
+        self.assertIsNotNone(Shopcart.find(second_id))
