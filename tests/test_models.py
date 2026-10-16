@@ -153,6 +153,19 @@ class TestShopcartModel(TestModelBase):
         self.assertGreaterEqual(found.last_updated, original_updated)
         self.assertEqual(len(Shopcart.all()), 1)
 
+    def test_update_shopcart_items_only(self):
+        """It should refresh last_updated when only the Items of a Shopcart change"""
+        shopcart = ShopcartFactory()
+        shopcart.create()
+        original_updated = shopcart.last_updated
+
+        shopcart.items.append(Item(**make_item_data()))
+        shopcart.update()
+
+        found = Shopcart.find(shopcart.id)
+        self.assertEqual(len(found.items), 1)
+        self.assertGreater(found.last_updated, original_updated)
+
     def test_update_shopcart_no_id(self):
         """It should not Update a Shopcart that has no id"""
         shopcart = ShopcartFactory()
