@@ -208,6 +208,16 @@ class Shopcart(db.Model, PersistentBase):
     def __repr__(self):
         return f"<Shopcart id=[{self.id}] user_id={self.user_id}>"
 
+    def update(self):
+        """
+        Updates the Shopcart in the database
+
+        onupdate only fires when a Shopcart column changes, so last_updated
+        is set here to also cover changes to the Items alone.
+        """
+        self.last_updated = utc_now()
+        super().update()
+
     def serialize(self):
         """Serializes a Shopcart and its Items into a dictionary"""
         return {
