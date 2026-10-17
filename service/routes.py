@@ -104,3 +104,18 @@ def delete_shopcarts(shopcart_id):
     shopcart.delete()
 
     return "", status.HTTP_204_NO_CONTENT
+
+
+######################################################################
+# LIST ALL SHOPCARTS
+######################################################################
+@app.route("/shopcarts", methods=["GET"])
+def list_shopcarts():
+    """Returns all of the Shopcarts and their Items"""
+    app.logger.info("Request to list Shopcarts")
+
+    shopcarts = Shopcart.all()
+    results = [shopcart.serialize() for shopcart in shopcarts]
+    app.logger.info("Returning %d Shopcarts", len(results))
+
+    return jsonify(results), status.HTTP_200_OK

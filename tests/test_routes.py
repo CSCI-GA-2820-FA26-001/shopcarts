@@ -397,3 +397,42 @@ class TestYourResourceService(TestCase):
         data = response.get_json()
         self.assertEqual(data["error"], "Not Found")
         self.assertIn("Shopcart with id '0' could not be found", data["message"])
+
+    ######################################################################
+    #  L I S T   S H O P C A R T S   (#8)
+    ######################################################################
+
+    def test_list_shopcarts(self):
+        """It should List all Shopcarts"""
+        for user_id in (1, 2, 3):
+            self.client.post("/shopcarts", json={"user_id": user_id})
+
+        response = self.client.get("/shopcarts")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), 3)
+        self.assertEqual(sorted(cart["user_id"] for cart in data), [1, 2, 3])
+
+    def test_list_shopcarts_with_items(self):
+        """It should List Shopcarts with their Items"""
+        item = {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
+        created = self.client.post(
+            "/shopcarts", json={"user_id": 1, "items": [item]}
+        ).get_json()
+
+        response = self.client.get("/shopcarts")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], created["id"])
+        self.assertEqual(len(data[0]["items"]), 1)
+        self.assertEqual(data[0]["items"][0]["product_id"], 1001)
+
+    def test_list_shopcarts_empty(self):
+        """It should return an empty list when there are no Shopcarts"""
+        response = self.client.get("/shopcarts")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), [])
