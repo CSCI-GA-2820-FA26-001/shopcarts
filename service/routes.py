@@ -89,7 +89,7 @@ def create_shopcart():
 # DELETE A SHOPCART
 ######################################################################
 @app.route("/shopcarts/<int:shopcart_id>", methods=["DELETE"])
-def delete_shopcarts(shopcart_id):
+def delete_shopcart(shopcart_id):
     """
     Delete a Shopcart
 
