@@ -64,6 +64,29 @@ def get_shopcarts(shopcart_id):
 
 
 ######################################################################
+# UPDATE AN EXISTING SHOPCART
+######################################################################
+@app.route("/shopcarts/<int:shopcart_id>", methods=["PUT"])
+def update_shopcart(shopcart_id):
+    """
+    Update a Shopcart
+
+    This endpoint will update a Shopcart based on the body that is posted.
+    If "items" is sent, it replaces the Items of the Shopcart.
+    """
+    app.logger.info("Request to update a Shopcart with id: %s", shopcart_id)
+
+    shopcart = Shopcart.find(shopcart_id)
+    if not shopcart:
+        abort(status.HTTP_404_NOT_FOUND, f"Shopcart with id '{shopcart_id}' could not be found.")
+
+    shopcart.deserialize(request.get_json())
+    shopcart.update()
+
+    return jsonify(shopcart.serialize()), status.HTTP_200_OK
+
+
+######################################################################
 # CREATE A SHOPCART
 ######################################################################
 @app.route("/shopcarts", methods=["POST"])

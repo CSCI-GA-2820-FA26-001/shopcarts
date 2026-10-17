@@ -21,6 +21,7 @@ TestYourResourceModel API Service Test Suite
 # pylint: disable=duplicate-code
 import os
 import logging
+from datetime import datetime
 from unittest import TestCase
 from wsgi import app
 from service.common import status
@@ -132,6 +133,162 @@ class TestYourResourceService(TestCase):
         data = response.get_json()
         self.assertEqual(data["error"], "Not Found")
         self.assertIn("Shopcart with id '0' could not be found", data["message"])
+
+    ######################################################################
+    #  U P D A T E   A   S H O P C A R T   (#6)
+    ######################################################################
+
+    def test_update_shopcart(self):
+        """It should Update a Shopcart"""
+        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+
+        response = self.client.put(f"/shopcarts/{created['id']}", json={"user_id": 456})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(data["id"], created["id"])
+        self.assertEqual(data["user_id"], 456)
+        self.assertEqual(data["created_at"], created["created_at"])
+
+        response = self.client.get(f"/shopcarts/{created['id']}")
+        self.assertEqual(response.get_json()["user_id"], 456)
+        self.assertEqual(len(Shopcart.all()), 1)
+
+    def test_update_shopcart_replaces_items(self):
+        """It should replace the Items of a Shopcart"""
+        payload = {
+            "user_id": 123,
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+                {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
+            ],
+        }
+        created = self.client.post("/shopcarts", json=payload).get_json()
+
+        payload["items"] = [
+            {"product_id": 1001, "name": "Product A", "quantity": 5, "price": 24.99},
+        ]
+        response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data["items"]), 1)
+        self.assertEqual(data["items"][0]["product_id"], 1001)
+        self.assertEqual(data["items"][0]["quantity"], 5)
+        self.assertEqual(data["items"][0]["shopcart_id"], created["id"])
+        self.assertEqual(len(Item.all()), 1)
+
+    def test_update_shopcart_empty_items(self):
+        """It should remove every Item when Updated with an empty Items list"""
+        payload = {
+            "user_id": 123,
+            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+        }
+        created = self.client.post("/shopcarts", json=payload).get_json()
+
+        response = self.client.put(f"/shopcarts/{created['id']}", json={"user_id": 123, "items": []})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json()["items"], [])
+        self.assertEqual(len(Item.all()), 0)
+
+    def test_update_shopcart_without_items(self):
+        """It should keep the Items when Updated without an Items list"""
+        payload = {
+            "user_id": 123,
+            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+        }
+        created = self.client.post("/shopcarts", json=payload).get_json()
+
+        response = self.client.put(f"/shopcarts/{created['id']}", json={"user_id": 456})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(data["user_id"], 456)
+        self.assertEqual(data["items"], created["items"])
+
+    def test_update_shopcart_last_updated(self):
+        """It should refresh last_updated when only the Items change"""
+        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+        payload = {
+            "user_id": 123,
+            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+        }
+
+        response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertGreater(
+            datetime.fromisoformat(data["last_updated"]),
+            datetime.fromisoformat(created["last_updated"]),
+        )
+        self.assertEqual(data["created_at"], created["created_at"])
+
+    def test_update_shopcart_ignores_id(self):
+        """It should not change the id of a Shopcart"""
+        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+
+        response = self.client.put(
+            f"/shopcarts/{created['id']}",
+            json={"id": created["id"] + 1000, "user_id": 456},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json()["id"], created["id"])
+        self.assertIsNone(Shopcart.find(created["id"] + 1000))
+
+    def test_update_shopcart_not_found(self):
+        """It should not Update a Shopcart that does not exist"""
+        response = self.client.put("/shopcarts/0", json={"user_id": 456})
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        data = response.get_json()
+        self.assertEqual(data["error"], "Not Found")
+        self.assertIn("Shopcart with id '0' could not be found", data["message"])
+        self.assertEqual(len(Shopcart.all()), 0)
+
+    def test_update_shopcart_missing_user_id(self):
+        """It should not Update a Shopcart without a user_id"""
+        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+
+        response = self.client.put(f"/shopcarts/{created['id']}", json={"items": []})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.get_json()["error"], "Bad Request")
+        self.assertEqual(Shopcart.find(created["id"]).user_id, 123)
+
+    def test_update_shopcart_bad_item(self):
+        """It should not Update a Shopcart when an Item is invalid"""
+        payload = {
+            "user_id": 123,
+            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+        }
+        created = self.client.post("/shopcarts", json=payload).get_json()
+
+        payload = {
+            "user_id": 456,
+            "items": [{"product_id": 1002, "name": "Product B", "quantity": 0, "price": 5.00}],
+        }
+        response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        response = self.client.get(f"/shopcarts/{created['id']}")
+        self.assertEqual(response.get_json()["user_id"], 123)
+        self.assertEqual(response.get_json()["items"], created["items"])
+
+    def test_update_shopcart_unsupported_media_type(self):
+        """It should not Update a Shopcart without a JSON content type"""
+        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+
+        response = self.client.put(
+            f"/shopcarts/{created['id']}",
+            data='{"user_id": 456}',
+            content_type="text/plain",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        self.assertEqual(Shopcart.find(created["id"]).user_id, 123)
 
     def test_create_shopcart(self):
         """It should Create a Shopcart"""
