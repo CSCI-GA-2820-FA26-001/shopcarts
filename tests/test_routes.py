@@ -336,6 +336,69 @@ class TestYourResourceService(TestCase):
         self.assertEqual(len(Shopcart.all()), 0)
 
     ######################################################################
+    #  D E L E T E   A   S H O P C A R T   (#7)
+    ######################################################################
+
+    def test_delete_shopcart(self):
+        """It should Delete a Shopcart"""
+        shopcart = Shopcart(user_id=123)
+        shopcart.create()
+        shopcart_id = shopcart.id
+
+        response = self.client.delete(f"/shopcarts/{shopcart_id}")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(len(response.data), 0)
+        self.assertIsNone(Shopcart.find(shopcart_id))
+
+        response = self.client.get(f"/shopcarts/{shopcart_id}")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_shopcart_with_items(self):
+        """It should Delete a Shopcart and its Items"""
+        payload = {
+            "user_id": 123,
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+                {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
+            ],
+        }
+        created = self.client.post("/shopcarts", json=payload).get_json()
+        self.assertEqual(len(Item.all()), 2)
+
+        response = self.client.delete(f"/shopcarts/{created['id']}")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIsNone(Shopcart.find(created["id"]))
+        self.assertEqual(len(Item.all()), 0)
+
+    def test_delete_shopcart_leaves_others(self):
+        """It should only Delete the requested Shopcart"""
+        keep = self.client.post(
+            "/shopcarts",
+            json={
+                "user_id": 1,
+                "items": [{"product_id": 1001, "name": "Kept", "quantity": 1, "price": 1.00}],
+            },
+        ).get_json()
+        remove = self.client.post("/shopcarts", json={"user_id": 2}).get_json()
+
+        response = self.client.delete(f"/shopcarts/{remove['id']}")
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual([cart.id for cart in Shopcart.all()], [keep["id"]])
+        self.assertEqual(len(Item.all()), 1)
+
+    def test_delete_shopcart_not_found(self):
+        """It should not Delete a Shopcart that does not exist"""
+        response = self.client.delete("/shopcarts/0")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        data = response.get_json()
+        self.assertEqual(data["error"], "Not Found")
+        self.assertIn("Shopcart with id '0' could not be found", data["message"])
+
+    ######################################################################
     #  L I S T   S H O P C A R T S   (#8)
     ######################################################################
 

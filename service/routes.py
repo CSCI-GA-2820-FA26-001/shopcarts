@@ -86,6 +86,27 @@ def create_shopcart():
 
 
 ######################################################################
+# DELETE A SHOPCART
+######################################################################
+@app.route("/shopcarts/<int:shopcart_id>", methods=["DELETE"])
+def delete_shopcart(shopcart_id):
+    """
+    Delete a Shopcart
+
+    This endpoint will delete a Shopcart and its Items based on the id specified in the path
+    """
+    app.logger.info("Request to delete a Shopcart with id: %s", shopcart_id)
+
+    shopcart = Shopcart.find(shopcart_id)
+    if not shopcart:
+        abort(status.HTTP_404_NOT_FOUND, f"Shopcart with id '{shopcart_id}' could not be found.")
+
+    shopcart.delete()
+
+    return "", status.HTTP_204_NO_CONTENT
+
+
+######################################################################
 # LIST ALL SHOPCARTS
 ######################################################################
 @app.route("/shopcarts", methods=["GET"])
