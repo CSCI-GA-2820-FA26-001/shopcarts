@@ -154,11 +154,11 @@ def add_item(shopcart_id):
     shopcart = Shopcart.find(shopcart_id)
     if shopcart is None:
         app.logger.info("Unable to find shopcart")
-        abort(404, description="Shopcart not found")
+        abort(status.HTTP_404_NOT_FOUND, description="Shopcart not found")
     data = request.get_json()
     item = Item()
     item.deserialize(data)
     item.shopcart_id = shopcart_id
     item.create()
     location_url = f"/shopcarts/{shopcart_id}/items/{item.id}"
-    return jsonify(item.serialize()), 201, {"Location": location_url}
+    return jsonify(item.serialize()), status.HTTP_201_CREATED, {"Location": location_url}
