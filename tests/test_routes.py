@@ -71,9 +71,13 @@ class TestYourResourceService(TestCase):
     ######################################################################
 
     def test_index(self):
-        """It should call the home page"""
+        """It should return information about the service at the root URL"""
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        data = resp.get_json()
+        self.assertEqual(data["name"], "Shopcart REST API Service")
+        self.assertEqual(data["version"], "1.0")
+        self.assertTrue(data["paths"].endswith("/shopcarts"))
 
     ######################################################################
     #  R E A D   A   S H O P C A R T   (#5)
