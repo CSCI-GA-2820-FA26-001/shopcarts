@@ -749,3 +749,63 @@ class TestYourResourceService(TestCase):
         self.assertEqual(remaining.shopcart_id, second_id)
         self.assertIsNotNone(Shopcart.find(first_id))
         self.assertIsNotNone(Shopcart.find(second_id))
+
+    ######################################################################
+    #  L I S T   I T E M S   I N   A   S H O P C A R T   (#12)
+    ######################################################################
+
+    def test_list_items(self):
+        """It should List all Items in a Shopcart"""
+        items = [
+            {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+            {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
+        ]
+        created = self.client.post(
+            "/shopcarts", json={"user_id": 1, "items": items}
+        ).get_json()
+
+        response = self.client.get(f"/shopcarts/{created['id']}/items")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), 2)
+        self.assertEqual([item["product_id"] for item in data], [1001, 1002])
+        for item in data:
+            self.assertEqual(item["shopcart_id"], created["id"])
+            for field in ("id", "name", "quantity", "price"):
+                self.assertIn(field, item)
+
+    def test_list_items_empty(self):
+        """It should return an empty list for a Shopcart with no Items"""
+        created = self.client.post("/shopcarts", json={"user_id": 1}).get_json()
+
+        response = self.client.get(f"/shopcarts/{created['id']}/items")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), [])
+
+    def test_list_items_only_from_that_shopcart(self):
+        """It should only List the Items of the Shopcart in the URL"""
+        item = {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
+        first = self.client.post(
+            "/shopcarts", json={"user_id": 1, "items": [item]}
+        ).get_json()
+        self.client.post(
+            "/shopcarts", json={"user_id": 2, "items": [item, item]}
+        )
+
+        response = self.client.get(f"/shopcarts/{first['id']}/items")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["shopcart_id"], first["id"])
+
+    def test_list_items_shopcart_not_found(self):
+        """It should not List Items of a Shopcart that does not exist"""
+        response = self.client.get("/shopcarts/0/items")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        data = response.get_json()
+        self.assertEqual(data["error"], "Not Found")
+        self.assertIn("Shopcart with id '0' could not be found", data["message"])
