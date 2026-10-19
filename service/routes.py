@@ -183,6 +183,37 @@ def add_item(shopcart_id):
 
 
 ######################################################################
+# UPDATE AN ITEM IN A SHOPCART (#10)
+######################################################################
+@app.route("/shopcarts/<int:shopcart_id>/items/<int:item_id>", methods=["PUT"])
+def update_item(shopcart_id, item_id):
+    """Update an existing Item without changing its ID or parent Shopcart.
+
+    PUT requires product_id, name, quantity, and price. Item.deserialize()
+    validates the data and ignores id and shopcart_id supplied in the body.
+    """
+    app.logger.info(
+        "Request to update Item %s in Shopcart %s", item_id, shopcart_id
+    )
+
+    shopcart = Shopcart.find(shopcart_id)
+    if shopcart is None:
+        abort(status.HTTP_404_NOT_FOUND, description="Shopcart not found")
+
+    item = Item.find(item_id)
+    if item is None or item.shopcart_id != shopcart_id:
+        abort(
+            status.HTTP_404_NOT_FOUND,
+            description="Item not found in this shopcart",
+        )
+
+    item.deserialize(request.get_json())
+    item.update()
+
+    return jsonify(item.serialize()), status.HTTP_200_OK
+
+
+######################################################################
 # DELETE AN ITEM
 ######################################################################
 @app.route("/shopcarts/<int:shopcart_id>/items/<int:item_id>", methods=["DELETE"])
