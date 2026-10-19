@@ -14,7 +14,7 @@ The service supports:
 - Creating shopping carts for users
 - Retrieving, updating, listing, and deleting shopping carts
 - Adding products to shopping carts
-- Retrieving, listing, and deleting individual cart items
+- Retrieving, updating, listing, and deleting individual cart items
 - Persisting shopping carts and items in PostgreSQL
 
 Each shopcart belongs to a user and can contain multiple items. Each item stores a product ID, name, quantity, and price.
@@ -71,7 +71,7 @@ The root endpoint returns JSON containing the service name, version, and Shopcar
 
 ## REST API Endpoints
 
-The following endpoints are implemented on the repository's `master` branch.
+The service provides the following endpoints.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -84,6 +84,7 @@ The following endpoints are implemented on the repository's `master` branch.
 | POST | `/shopcarts/{shopcart_id}/items` | Add an item to a shopping cart |
 | GET | `/shopcarts/{shopcart_id}/items` | List items in a shopping cart |
 | GET | `/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
+| PUT | `/shopcarts/{shopcart_id}/items/{item_id}` | Update an existing item in a shopping cart |
 | DELETE | `/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
 
 ### Shopcart Data Model
@@ -176,6 +177,21 @@ curl http://localhost:8080/shopcarts/1/items/1
 ```
 
 Replace both IDs with an existing shopcart and an item belonging to that shopcart. A successful request returns `200 OK` with the item's JSON representation.
+
+### Update an Item
+
+```bash
+curl -X PUT http://localhost:8080/shopcarts/1/items/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": 1001,
+    "name": "Large notebook",
+    "quantity": 5,
+    "price": 9.99
+  }'
+```
+
+Replace both IDs with an existing shopcart and an item belonging to it. Send all four fields (`product_id`, `name`, `quantity`, and `price`) in the PUT request. A successful update returns `200 OK` with the updated item. The item ID and its parent shopcart stay unchanged; `id` and `shopcart_id` in the request body are ignored. Invalid item data returns `400 Bad Request`, and a missing shopcart, missing item, or item belonging to a different shopcart returns `404 Not Found`.
 
 ### Delete an Item
 
