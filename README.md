@@ -14,7 +14,7 @@ The service supports:
 - Creating shopping carts for users
 - Retrieving, updating, listing, and deleting shopping carts
 - Adding products to shopping carts
-- Listing and deleting individual cart items
+- Retrieving, listing, and deleting individual cart items
 - Persisting shopping carts and items in PostgreSQL
 
 Each shopcart belongs to a user and can contain multiple items. Each item stores a product ID, name, quantity, and price.
@@ -83,9 +83,8 @@ The following endpoints are implemented on the repository's `master` branch.
 | DELETE | `/shopcarts/{shopcart_id}` | Delete a shopping cart |
 | POST | `/shopcarts/{shopcart_id}/items` | Add an item to a shopping cart |
 | GET | `/shopcarts/{shopcart_id}/items` | List items in a shopping cart |
+| GET | `/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
 | DELETE | `/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
-
-**In progress:** `GET /shopcarts/{shopcart_id}/items/{item_id}` retrieves an individual item. This endpoint is implemented in PR #30 and is awaiting review.
 
 ### Shopcart Data Model
 
@@ -107,6 +106,17 @@ An item contains:
 - `name` — Product name
 - `quantity` — Number of units
 - `price` — Unit price
+
+### Validation and Error Responses
+
+- Shopcart `user_id` must be an integer (not a boolean).
+- Item `product_id` must be an integer, and `name` must be a non-empty string.
+- Item `quantity` must be a positive integer (`quantity > 0`).
+- Item `price` must be a finite, non-negative number (`price >= 0`).
+- The service assigns resource IDs; an item cannot be moved to another shopcart by specifying `shopcart_id` in its request body.
+- `400 Bad Request` is returned for invalid resource data.
+- `404 Not Found` is returned when a requested shopcart or item does not exist, or when an item does not belong to the specified shopcart.
+- `405 Method Not Allowed` is returned for unsupported HTTP methods; `415 Unsupported Media Type` is returned for unsupported request media types.
 
 ## API Usage Examples
 
@@ -158,6 +168,14 @@ A successful request returns `201 Created` with the created item.
 ```bash
 curl http://localhost:8080/shopcarts/1/items
 ```
+
+### Retrieve a Specific Item
+
+```bash
+curl http://localhost:8080/shopcarts/1/items/1
+```
+
+Replace both IDs with an existing shopcart and an item belonging to that shopcart. A successful request returns `200 OK` with the item's JSON representation.
 
 ### Delete an Item
 
