@@ -121,7 +121,12 @@ class TestYourResourceService(TestCase):
         payload = {
             "user_id": 123,
             "items": [
-                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+                {
+                    "product_id": 1001,
+                    "name": "Product A",
+                    "quantity": 2,
+                    "price": 24.99,
+                },
                 {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
             ],
         }
@@ -181,7 +186,12 @@ class TestYourResourceService(TestCase):
         payload = {
             "user_id": 123,
             "items": [
-                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+                {
+                    "product_id": 1001,
+                    "name": "Product A",
+                    "quantity": 2,
+                    "price": 24.99,
+                },
                 {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
             ],
         }
@@ -204,11 +214,15 @@ class TestYourResourceService(TestCase):
         """It should remove every Item when Updated with an empty Items list"""
         payload = {
             "user_id": 123,
-            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
+            ],
         }
         created = self.client.post("/shopcarts", json=payload).get_json()
 
-        response = self.client.put(f"/shopcarts/{created['id']}", json={"user_id": 123, "items": []})
+        response = self.client.put(
+            f"/shopcarts/{created['id']}", json={"user_id": 123, "items": []}
+        )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json()["items"], [])
@@ -218,7 +232,9 @@ class TestYourResourceService(TestCase):
         """It should keep the Items when Updated without an Items list"""
         payload = {
             "user_id": 123,
-            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
+            ],
         }
         created = self.client.post("/shopcarts", json=payload).get_json()
 
@@ -234,7 +250,9 @@ class TestYourResourceService(TestCase):
         created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
         payload = {
             "user_id": 123,
-            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
+            ],
         }
 
         response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
@@ -284,13 +302,17 @@ class TestYourResourceService(TestCase):
         """It should not Update a Shopcart when an Item is invalid"""
         payload = {
             "user_id": 123,
-            "items": [{"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}],
+            "items": [
+                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
+            ],
         }
         created = self.client.post("/shopcarts", json=payload).get_json()
 
         payload = {
             "user_id": 456,
-            "items": [{"product_id": 1002, "name": "Product B", "quantity": 0, "price": 5.00}],
+            "items": [
+                {"product_id": 1002, "name": "Product B", "quantity": 0, "price": 5.00}
+            ],
         }
         response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
 
@@ -538,7 +560,12 @@ class TestYourResourceService(TestCase):
         payload = {
             "user_id": 123,
             "items": [
-                {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99},
+                {
+                    "product_id": 1001,
+                    "name": "Product A",
+                    "quantity": 2,
+                    "price": 24.99,
+                },
                 {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
             ],
         }
@@ -557,7 +584,9 @@ class TestYourResourceService(TestCase):
             "/shopcarts",
             json={
                 "user_id": 1,
-                "items": [{"product_id": 1001, "name": "Kept", "quantity": 1, "price": 1.00}],
+                "items": [
+                    {"product_id": 1001, "name": "Kept", "quantity": 1, "price": 1.00}
+                ],
             },
         ).get_json()
         remove = self.client.post("/shopcarts", json={"user_id": 2}).get_json()
@@ -794,9 +823,7 @@ class TestYourResourceService(TestCase):
         first = self.client.post(
             "/shopcarts", json={"user_id": 1, "items": [item]}
         ).get_json()
-        self.client.post(
-            "/shopcarts", json={"user_id": 2, "items": [item, item]}
-        )
+        self.client.post("/shopcarts", json={"user_id": 2, "items": [item, item]})
 
         response = self.client.get(f"/shopcarts/{first['id']}/items")
 
@@ -813,3 +840,65 @@ class TestYourResourceService(TestCase):
         data = response.get_json()
         self.assertEqual(data["error"], "Not Found")
         self.assertIn("Shopcart with id '0' could not be found", data["message"])
+
+    ######################################################################
+    # READ AN ITEM FROM A SHOPCART (#13)
+    ######################################################################
+
+    def test_read_item(self):
+        """It should Read a specific Item from a Shopcart"""
+        payload = make_item()
+        created = self.client.post(
+            BASE_URL,
+            json={"user_id": 1, "items": [payload]},
+        ).get_json()
+
+        shopcart_id = created["id"]
+        expected_item = created["items"][0]
+        item_id = expected_item["id"]
+
+        response = self.client.get(f"{BASE_URL}/{shopcart_id}/items/{item_id}")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(data, expected_item)
+
+        for field in ("id", "shopcart_id", "product_id", "name", "quantity", "price"):
+            self.assertIn(field, data)
+
+    def test_read_item_not_found(self):
+        """It should return 404 when the Item does not exist"""
+        shopcart = self._create_shopcart()
+
+        response = self.client.get(f"{BASE_URL}/{shopcart.id}/items/0")
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_read_item_shopcart_not_found(self):
+        """It should return 404 when the Shopcart does not exist"""
+        response = self.client.get(f"{BASE_URL}/0/items/1")
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_read_item_wrong_shopcart(self):
+        """It should not Read an Item from another Shopcart"""
+        first = self._create_shopcart(user_id=1)
+        second = self.client.post(
+            BASE_URL,
+            json={"user_id": 2, "items": [make_item()]},
+        ).get_json()
+
+        item_id = second["items"][0]["id"]
+
+        response = self.client.get(f"{BASE_URL}/{first.id}/items/{item_id}")
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
