@@ -1,0 +1,52 @@
+name: CI Build
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Required services
+    services:
+      # PostgreSQL 15 to match the dev container
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        # Wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    # Steps for the build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python package dependencies
+        run: |
+          python -m pip install -U pip pipenv
+          pipenv install --system --dev
+
+      - name: Run unit tests
+        run: make test
+        env:
+          DATABASE_URI: "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
