@@ -265,3 +265,17 @@ class Shopcart(db.Model, PersistentBase):
         if items is not None:
             self.items = items
         return self
+
+    ##################################################
+    # CLASS METHODS
+    ##################################################
+
+    @classmethod
+    def find_by_user_id(cls, user_id):
+        """Returns all of the Shopcarts that belong to a user
+
+        Args:
+            user_id (int): the id of the user whose Shopcarts you want
+        """
+        logger.info("Processing user_id query for %s ...", user_id)
+        return cls.query.filter(cls.user_id == user_id).all()

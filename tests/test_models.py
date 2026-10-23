@@ -137,6 +137,21 @@ class TestShopcartModel(TestModelBase):
         """It should return None when a Shopcart is not found"""
         self.assertIsNone(Shopcart.find(0))
 
+    def test_find_by_user_id(self):
+        """It should Find only the Shopcarts that belong to a user"""
+        for user_id in (1, 1, 2):
+            ShopcartFactory(user_id=user_id).create()
+
+        found = Shopcart.find_by_user_id(1)
+        self.assertEqual(len(found), 2)
+        for shopcart in found:
+            self.assertEqual(shopcart.user_id, 1)
+
+    def test_find_by_user_id_not_found(self):
+        """It should return an empty list when a user has no Shopcarts"""
+        ShopcartFactory(user_id=1).create()
+        self.assertEqual(Shopcart.find_by_user_id(3), [])
+
     def test_update_shopcart(self):
         """It should Update a Shopcart"""
         shopcart = ShopcartFactory(user_id=1)
