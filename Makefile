@@ -1,6 +1,6 @@
 # These can be overidden with env vars.
 REGISTRY ?= cluster-registry:5000
-IMAGE_NAME ?= petshop
+IMAGE_NAME ?= shopcarts
 IMAGE_TAG ?= 1.0
 IMAGE ?= $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 PLATFORM ?= "linux/amd64,linux/arm64"
@@ -32,9 +32,9 @@ install: ## Install Python dependencies
 .PHONY: lint
 lint: ## Run the linter
 	$(info Running linting...)
-	-flake8 service tests --count --select=E9,F63,F7,F82 --show-source --statistics
-	-flake8 service tests --count --max-complexity=10 --max-line-length=127 --statistics
-	-pylint service tests --max-line-length=127
+	flake8 service tests --count --select=E9,F63,F7,F82 --show-source --statistics
+	flake8 service tests --count --max-complexity=10 --max-line-length=127 --statistics
+	pylint service tests --max-line-length=127
 
 .PHONY: test
 test: ## Run the unit tests
@@ -61,7 +61,7 @@ cluster: ## Create a K3D Kubernetes cluster with load balancer and registry
 .PHONY: cluster-rm
 cluster-rm: ## Remove a K3D Kubernetes cluster
 	$(info Removing Kubernetes cluster...)
-	k3d cluster delete nyu-devops
+	k3d cluster delete $(CLUSTER)
 
 .PHONY: import
 import: ## Import the image into the local K3D cluster
