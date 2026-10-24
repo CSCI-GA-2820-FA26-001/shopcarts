@@ -537,6 +537,54 @@ class TestYourResourceService(TestCase):
         self.assertEqual(len(Shopcart.all()), 0)
 
     ######################################################################
+    #  S H O P C A R T   S T A T U S   (#33)
+    ######################################################################
+
+    def test_create_shopcart_is_open(self):
+        """It should Create a Shopcart with status OPEN"""
+        response = self.client.post("/shopcarts", json={"user_id": 123})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.get_json()["status"], "OPEN")
+
+    def test_create_shopcart_ignores_status(self):
+        """It should ignore a status sent when Creating a Shopcart"""
+        for supplied in ("CHECKED_OUT", "BANANA", None):
+            with self.subTest(status=supplied):
+                response = self.client.post(
+                    "/shopcarts", json={"user_id": 123, "status": supplied}
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+                data = response.get_json()
+                self.assertEqual(data["status"], "OPEN")
+                self.assertEqual(Shopcart.find(data["id"]).status, "OPEN")
+
+    def test_update_shopcart_keeps_status(self):
+        """It should keep the current status when Updating a Shopcart"""
+        other = {"OPEN": "CHECKED_OUT", "CHECKED_OUT": "OPEN"}
+        for current in ("OPEN", "CHECKED_OUT"):
+            payloads = {
+                "omitted": {"user_id": 456},
+                "other allowed value": {"user_id": 456, "status": other[current]},
+                "unsupported value": {"user_id": 456, "status": "BANANA"},
+                "null": {"user_id": 456, "status": None},
+            }
+            for case, payload in payloads.items():
+                with self.subTest(current=current, supplied=case):
+                    shopcart = Shopcart(user_id=123, status=current)
+                    shopcart.create()
+
+                    response = self.client.put(f"/shopcarts/{shopcart.id}", json=payload)
+
+                    self.assertEqual(response.status_code, status.HTTP_200_OK)
+                    data = response.get_json()
+                    self.assertEqual(data["user_id"], 456)
+                    self.assertEqual(data["status"], current)
+
+                    response = self.client.get(f"/shopcarts/{data['id']}")
+                    self.assertEqual(response.get_json()["status"], current)
+
+    ######################################################################
     #  D E L E T E   A   S H O P C A R T   (#7)
     ######################################################################
 

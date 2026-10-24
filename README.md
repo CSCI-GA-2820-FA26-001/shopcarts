@@ -93,6 +93,7 @@ A shopcart contains:
 
 - `id` — Unique shopcart identifier
 - `user_id` — Identifier of the customer
+- `status` — `OPEN` or `CHECKED_OUT`. New shopcarts start `OPEN`. The server manages this field, so a `status` sent in a POST or PUT body is ignored
 - `created_at` — Creation timestamp
 - `last_updated` — Last modification timestamp
 - `items` — List of items in the shopcart
