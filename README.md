@@ -76,6 +76,7 @@ The service provides the following endpoints.
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/` | Return service information |
+| GET | `/health` | Health check for Kubernetes probes; returns `{"status": "OK"}` |
 | POST | `/shopcarts` | Create a shopping cart |
 | GET | `/shopcarts` | List all shopping carts |
 | GET | `/shopcarts/{shopcart_id}` | Retrieve a shopping cart |

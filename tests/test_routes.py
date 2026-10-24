@@ -98,6 +98,16 @@ class TestYourResourceService(TestCase):
         self.assertTrue(data["paths"].endswith("/shopcarts"))
 
     ######################################################################
+    #  H E A L T H   C H E C K   (#26)
+    ######################################################################
+
+    def test_health(self):
+        """It should report that the service is healthy"""
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.get_json(), {"status": "OK"})
+
+    ######################################################################
     #  R E A D   A   S H O P C A R T   (#5)
     ######################################################################
 
