@@ -136,18 +136,15 @@ def delete_shopcart(shopcart_id):
     """
     Delete a Shopcart
 
-    This endpoint will delete a Shopcart and its Items based on the id specified in the path
+    This endpoint will delete a Shopcart and its Items based on the id specified in the path.
+    DELETE is idempotent, so it returns 204 even if the Shopcart doesn't exist.
     """
     app.logger.info("Request to delete a Shopcart with id: %s", shopcart_id)
 
     shopcart = Shopcart.find(shopcart_id)
-    if not shopcart:
-        abort(
-            status.HTTP_404_NOT_FOUND,
-            f"Shopcart with id '{shopcart_id}' could not be found.",
-        )
-
-    shopcart.delete()
+    if shopcart:
+        shopcart.delete()
+        app.logger.info("Shopcart with id [%s] deleted", shopcart_id)
 
     return "", status.HTTP_204_NO_CONTENT
 
@@ -227,18 +224,18 @@ def update_item(shopcart_id, item_id):
 ######################################################################
 @app.route("/shopcarts/<int:shopcart_id>/items/<int:item_id>", methods=["DELETE"])
 def delete_item(shopcart_id, item_id):
-    """Delete an item from an existing shopcart."""
-    app.logger.info("Request to delete an item")
-    shopcart = Shopcart.find(shopcart_id)
-    if shopcart is None:
-        app.logger.info("Unable to find shopcart")
-        abort(status.HTTP_404_NOT_FOUND, description="Shopcart not found")
+    """Delete an item from a shopcart.
+
+    DELETE is idempotent, so it returns 204 even if the shopcart or item doesn't
+    exist. An item that belongs to a different shopcart is left alone.
+    """
+    app.logger.info("Request to delete item %s from shopcart %s", item_id, shopcart_id)
 
     item = Item.find(item_id)
-    if item is None or item.shopcart_id != shopcart_id:
-        abort(status.HTTP_404_NOT_FOUND, description="Item not found in this shopcart")
+    if item and item.shopcart_id == shopcart_id:
+        item.delete()
+        app.logger.info("Item with id [%s] deleted", item_id)
 
-    item.delete()
     return "", status.HTTP_204_NO_CONTENT
 
 
