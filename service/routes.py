@@ -157,10 +157,23 @@ def delete_shopcart(shopcart_id):
 ######################################################################
 @app.route("/shopcarts", methods=["GET"])
 def list_shopcarts():
-    """Returns all of the Shopcarts and their Items"""
+    """
+    Returns all of the Shopcarts and their Items
+
+    ?user_id=<int> returns only the Shopcarts of that user.
+    """
     app.logger.info("Request to list Shopcarts")
 
-    shopcarts = Shopcart.all()
+    user_id = request.args.get("user_id")
+    if user_id is None:
+        shopcarts = Shopcart.all()
+    else:
+        try:
+            user_id = int(user_id)
+        except ValueError:
+            abort(status.HTTP_400_BAD_REQUEST, "user_id must be an integer")
+        shopcarts = Shopcart.find_by_user_id(user_id)
+
     results = [shopcart.serialize() for shopcart in shopcarts]
     app.logger.info("Returning %d Shopcarts", len(results))
 
