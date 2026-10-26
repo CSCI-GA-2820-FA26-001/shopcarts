@@ -69,6 +69,28 @@ http://localhost:8080/
 
 The root endpoint returns JSON containing the service name, version, and Shopcarts collection URL.
 
+### Upgrading an existing database
+
+The service creates its tables with `db.create_all()` when it starts. That creates missing tables but never adds columns to tables that already exist. A database created before the shopcart `status` field was added fails with `column shopcart.status does not exist`. Fresh databases, including the one CI uses, are not affected.
+
+To add the column and keep your data, run this once from the Dev Container terminal:
+
+```bash
+python - <<'EOF'
+from sqlalchemy import create_engine, text
+from service.config import DATABASE_URI
+
+with create_engine(DATABASE_URI).begin() as conn:
+    conn.execute(text(
+        "ALTER TABLE shopcart ADD COLUMN IF NOT EXISTS status VARCHAR(16) NOT NULL DEFAULT 'OPEN'"
+    ))
+EOF
+```
+
+Existing shopcarts become `OPEN` and keep their items. Running it again does nothing.
+
+If you don't need the local data, `flask db-create` drops and recreates all tables instead.
+
 ## REST API Endpoints
 
 The service provides the following endpoints.
@@ -94,6 +116,7 @@ A shopcart contains:
 
 - `id` — Unique shopcart identifier
 - `user_id` — Identifier of the customer
+- `status` — `OPEN` or `CHECKED_OUT`. New shopcarts start `OPEN`. The server manages this field, so a `status` sent in a POST or PUT body is ignored
 - `created_at` — Creation timestamp
 - `last_updated` — Last modification timestamp
 - `items` — List of items in the shopcart

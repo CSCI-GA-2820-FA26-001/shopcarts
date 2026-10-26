@@ -293,6 +293,83 @@ class TestShopcartModel(TestModelBase):
         shopcart = ShopcartFactory(user_id=7)
         self.assertIn("user_id=7", repr(shopcart))
 
+    ######################################################################
+    #  S H O P C A R T   S T A T U S   (#33)
+    ######################################################################
+
+    def test_new_shopcart_is_open(self):
+        """It should Create a Shopcart with status OPEN when none is given"""
+        shopcart = Shopcart(user_id=7)
+        shopcart.create()
+        db.session.expire_all()
+
+        found = Shopcart.find(shopcart.id)
+        self.assertEqual(found.status, "OPEN")
+        self.assertEqual(found.serialize()["status"], "OPEN")
+
+    def test_checked_out_status_persists(self):
+        """It should keep a CHECKED_OUT status after saving and reading it back"""
+        shopcart = ShopcartFactory()
+        shopcart.items.append(Item(**make_item_data()))
+        shopcart.create()
+        original_id = shopcart.id
+        original_items = [item.serialize() for item in shopcart.items]
+
+        shopcart.status = "CHECKED_OUT"
+        shopcart.update()
+        db.session.expire_all()
+
+        found = Shopcart.find(original_id)
+        self.assertEqual(found.status, "CHECKED_OUT")
+        self.assertEqual(found.id, original_id)
+        self.assertEqual([item.serialize() for item in found.items], original_items)
+
+    def test_create_shopcart_invalid_status(self):
+        """It should not Create a Shopcart with an unsupported or null status"""
+        for value in ("BANANA", "open", None):
+            with self.subTest(status=value):
+                shopcart = Shopcart(user_id=7, status=value)
+                self.assertRaises(DataValidationError, shopcart.create)
+                self.assertEqual(Shopcart.all(), [])
+
+    def test_create_shopcart_status_changed_to_null(self):
+        """It should not Create a Shopcart whose status was set to null after it was built"""
+        shopcart = Shopcart(user_id=7)
+        shopcart.status = None
+        self.assertRaises(DataValidationError, shopcart.create)
+        self.assertEqual(Shopcart.all(), [])
+
+    def test_update_shopcart_invalid_status(self):
+        """It should not Update a Shopcart to an unsupported or null status"""
+        for value in ("BANANA", None):
+            with self.subTest(status=value):
+                shopcart = ShopcartFactory(user_id=1)
+                shopcart.create()
+                shopcart_id = shopcart.id
+
+                shopcart.user_id = 2
+                shopcart.status = value
+                self.assertRaises(DataValidationError, shopcart.update)
+
+                # a fresh query, so a bad value left in the session would show up here
+                persisted = (
+                    db.session.query(Shopcart.status, Shopcart.user_id)
+                    .filter_by(id=shopcart_id)
+                    .one()
+                )
+                self.assertEqual(tuple(persisted), ("OPEN", 1))
+
+    def test_deserialize_shopcart_ignores_status(self):
+        """It should leave status alone when Deserializing a Shopcart"""
+        for value in ("CHECKED_OUT", "BANANA", None):
+            with self.subTest(status=value):
+                shopcart = Shopcart().deserialize({"user_id": 7, "status": value})
+                self.assertEqual(shopcart.status, "OPEN")
+
+        shopcart = Shopcart(user_id=7, status="CHECKED_OUT")
+        shopcart.deserialize({"user_id": 8, "status": "OPEN"})
+        self.assertEqual(shopcart.status, "CHECKED_OUT")
+
 
 ######################################################################
 #  I T E M   M O D E L   T E S T   C A S E S

@@ -29,6 +29,12 @@ def is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+# Shopcart.status values. Only the checkout action (#34) moves a cart to CHECKED_OUT.
+STATUS_OPEN = "OPEN"
+STATUS_CHECKED_OUT = "CHECKED_OUT"
+SHOPCART_STATUSES = (STATUS_OPEN, STATUS_CHECKED_OUT)
+
+
 ######################################################################
 #  P E R S I S T E N T   B A S E   M O D E L
 ######################################################################
@@ -193,6 +199,9 @@ class Shopcart(db.Model, PersistentBase):
     ##################################################
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, nullable=False)
+    status = db.Column(
+        db.String(16), nullable=False, default=STATUS_OPEN, server_default=STATUS_OPEN
+    )
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utc_now)
     last_updated = db.Column(
         db.DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
@@ -205,16 +214,42 @@ class Shopcart(db.Model, PersistentBase):
         order_by="Item.id",
     )
 
+    def __init__(self, **kwargs):
+        # set here rather than relying on the column default, so a new cart
+        # reads OPEN before it is saved and an explicit status=None is kept
+        # (and rejected by validate_status)
+        kwargs.setdefault("status", STATUS_OPEN)
+        super().__init__(**kwargs)
+
     def __repr__(self):
         return f"<Shopcart id=[{self.id}] user_id={self.user_id}>"
+
+    def validate_status(self):
+        """Raises DataValidationError unless status is one of SHOPCART_STATUSES"""
+        if self.status not in SHOPCART_STATUSES:
+            raise DataValidationError(
+                "Invalid Shopcart: status must be one of " + ", ".join(SHOPCART_STATUSES)
+            )
+
+    def create(self):
+        """Creates the Shopcart in the database after checking its status"""
+        self.validate_status()
+        super().create()
 
     def update(self):
         """
         Updates the Shopcart in the database
 
+        A bad status is rolled back so it can't be flushed by a later query.
         onupdate only fires when a Shopcart column changes, so last_updated
         is set here to also cover changes to the Items alone.
         """
+        try:
+            with db.session.no_autoflush:
+                self.validate_status()
+        except DataValidationError:
+            db.session.rollback()
+            raise
         self.last_updated = utc_now()
         super().update()
 
@@ -223,6 +258,7 @@ class Shopcart(db.Model, PersistentBase):
         return {
             "id": self.id,
             "user_id": self.user_id,
+            "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "last_updated": (
                 self.last_updated.isoformat() if self.last_updated else None
@@ -234,7 +270,8 @@ class Shopcart(db.Model, PersistentBase):
         """
         Deserializes a Shopcart and its Items from a dictionary
 
-        id, created_at and last_updated are managed by the server and are ignored.
+        id, status, created_at and last_updated are managed by the server and
+        are ignored.
         If "items" is sent, it replaces the current Items. Nothing is changed
         unless every Item is valid.
 
