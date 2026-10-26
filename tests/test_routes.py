@@ -608,13 +608,20 @@ class TestYourResourceService(TestCase):
         self.assertEqual(len(Item.all()), 1)
 
     def test_delete_shopcart_not_found(self):
-        """It should not Delete a Shopcart that does not exist"""
+        """It should return 204 when Deleting a Shopcart that does not exist"""
         response = self.client.delete("/shopcarts/0")
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        data = response.get_json()
-        self.assertEqual(data["error"], "Not Found")
-        self.assertIn("Shopcart with id '0' could not be found", data["message"])
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.data, b"")
+
+    def test_delete_shopcart_twice(self):
+        """It should return 204 every time the same Shopcart is Deleted"""
+        created = self.client.post("/shopcarts", json={"user_id": 1}).get_json()
+
+        for _ in range(2):
+            response = self.client.delete(f"/shopcarts/{created['id']}")
+            self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIsNone(Shopcart.find(created["id"]))
 
     ######################################################################
     #  L I S T   S H O P C A R T S   (#8)
@@ -756,20 +763,32 @@ class TestYourResourceService(TestCase):
         self.assertIsNotNone(Shopcart.find(shopcart_id))
 
     def test_delete_item_shopcart_not_found(self):
-        """It should return 404 when the shopcart does not exist."""
+        """It should return 204 when the shopcart does not exist."""
         response = self.client.delete(f"{BASE_URL}/0/items/1")
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
     def test_delete_item_not_found(self):
-        """It should return 404 when the item does not exist."""
+        """It should return 204 when the item does not exist."""
         shopcart = self._create_shopcart()
         shopcart_id = shopcart.id
 
         response = self.client.delete(f"{BASE_URL}/{shopcart_id}/items/0")
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertIsNotNone(Shopcart.find(shopcart_id))
+
+    def test_delete_item_twice(self):
+        """It should return 204 every time the same item is deleted."""
+        created = self.client.post(
+            BASE_URL, json={"user_id": 1, "items": [make_item()]}
+        ).get_json()
+        url = f"{BASE_URL}/{created['id']}/items/{created['items'][0]['id']}"
+
+        for _ in range(2):
+            response = self.client.delete(url)
+            self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(len(Item.all()), 0)
 
     def test_delete_item_wrong_shopcart(self):
         """It should not delete an item belonging to another shopcart."""
@@ -786,7 +805,8 @@ class TestYourResourceService(TestCase):
 
         response = self.client.delete(f"{BASE_URL}/{first_id}/items/{item_id}")
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        # 204 because DELETE is idempotent, but the other cart's item must survive
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         remaining = Item.find(item_id)
         self.assertIsNotNone(remaining)
         self.assertEqual(remaining.shopcart_id, second_id)
