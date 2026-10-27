@@ -370,6 +370,44 @@ class TestShopcartModel(TestModelBase):
         shopcart.deserialize({"user_id": 8, "status": "OPEN"})
         self.assertEqual(shopcart.status, "CHECKED_OUT")
 
+    ######################################################################
+    #  C H E C K O U T   (#34)
+    ######################################################################
+
+    def test_checkout_shopcart(self):
+        """It should Checkout an open Shopcart that has Items"""
+        shopcart = ShopcartFactory()
+        shopcart.items.append(Item(**make_item_data()))
+        shopcart.create()
+
+        shopcart.checkout()
+
+        found = Shopcart.find(shopcart.id)
+        self.assertEqual(found.status, "CHECKED_OUT")
+        self.assertEqual(len(found.items), 1)
+
+    def test_checkout_empty_shopcart(self):
+        """It should not Checkout a Shopcart with no Items"""
+        shopcart = ShopcartFactory()
+        shopcart.create()
+
+        self.assertRaises(DataValidationError, shopcart.checkout)
+        self.assertEqual(Shopcart.find(shopcart.id).status, "OPEN")
+
+    def test_checkout_twice(self):
+        """It should leave a checked out Shopcart unchanged when Checked out again"""
+        shopcart = ShopcartFactory()
+        shopcart.items.append(Item(**make_item_data()))
+        shopcart.create()
+        shopcart.checkout()
+        last_updated = shopcart.last_updated
+
+        shopcart.checkout()
+
+        found = Shopcart.find(shopcart.id)
+        self.assertEqual(found.status, "CHECKED_OUT")
+        self.assertEqual(found.last_updated, last_updated)
+
 
 ######################################################################
 #  I T E M   M O D E L   T E S T   C A S E S

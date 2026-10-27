@@ -253,6 +253,24 @@ class Shopcart(db.Model, PersistentBase):
         self.last_updated = utc_now()
         super().update()
 
+    def checkout(self):
+        """
+        Checks out the Shopcart by moving it to CHECKED_OUT
+
+        Checking out a cart that is already CHECKED_OUT changes nothing, so the
+        action is safe to repeat. An empty cart can't be checked out.
+        """
+        if self.status == STATUS_CHECKED_OUT:
+            logger.info("Shopcart %s is already checked out", self.id)
+            return
+        if not self.items:
+            raise DataValidationError(
+                "Invalid Shopcart: can't check out an empty shopcart"
+            )
+        logger.info("Checking out Shopcart %s", self.id)
+        self.status = STATUS_CHECKED_OUT
+        self.update()
+
     def serialize(self):
         """Serializes a Shopcart and its Items into a dictionary"""
         return {

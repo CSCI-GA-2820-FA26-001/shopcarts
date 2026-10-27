@@ -18,7 +18,7 @@
 TestYourResourceModel API Service Test Suite
 """
 
-# pylint: disable=duplicate-code
+# pylint: disable=duplicate-code, too-many-lines
 import os
 import logging
 from datetime import datetime
@@ -980,3 +980,55 @@ class TestYourResourceService(TestCase):
             response.status_code,
             status.HTTP_404_NOT_FOUND,
         )
+
+    ######################################################################
+    #  C H E C K O U T   A   S H O P C A R T   (#34)
+    ######################################################################
+
+    def test_checkout_shopcart(self):
+        """It should Checkout an open Shopcart"""
+        created = self.client.post(
+            BASE_URL, json={"user_id": 7, "items": [make_item()]}
+        ).get_json()
+
+        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(data["status"], "CHECKED_OUT")
+        self.assertEqual(data["id"], created["id"])
+        self.assertEqual(data["user_id"], created["user_id"])
+        self.assertEqual(data["items"], created["items"])
+
+        response = self.client.get(f"{BASE_URL}/{created['id']}")
+        self.assertEqual(response.get_json()["status"], "CHECKED_OUT")
+
+    def test_checkout_shopcart_not_found(self):
+        """It should not Checkout a Shopcart that does not exist"""
+        response = self.client.put(f"{BASE_URL}/0/checkout")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.get_json()["error"], "Not Found")
+
+    def test_checkout_empty_shopcart(self):
+        """It should not Checkout a Shopcart with no Items"""
+        created = self.client.post(BASE_URL, json={"user_id": 7}).get_json()
+
+        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.get_json()["error"], "Bad Request")
+        response = self.client.get(f"{BASE_URL}/{created['id']}")
+        self.assertEqual(response.get_json()["status"], "OPEN")
+
+    def test_checkout_shopcart_twice(self):
+        """It should return the same Shopcart when Checked out again"""
+        created = self.client.post(
+            BASE_URL, json={"user_id": 7, "items": [make_item()]}
+        ).get_json()
+        first = self.client.put(f"{BASE_URL}/{created['id']}/checkout").get_json()
+
+        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), first)
