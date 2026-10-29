@@ -1,5 +1,7 @@
 # Shopcarts REST API
 
+[![Build Status](https://github.com/CSCI-GA-2820-FA26-001/shopcarts/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/CSCI-GA-2820-FA26-001/shopcarts/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CSCI-GA-2820-FA26-001/shopcarts/graph/badge.svg?branch=master)](https://codecov.io/gh/CSCI-GA-2820-FA26-001/shopcarts)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
 
