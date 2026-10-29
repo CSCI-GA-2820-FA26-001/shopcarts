@@ -711,6 +711,41 @@ class TestYourResourceService(TestCase):
         self.assertEqual(response.get_json(), [])
 
     ######################################################################
+    #  Q U E R Y   S H O P C A R T S   B Y   U S E R   (#25)
+    ######################################################################
+
+    def test_query_shopcarts_by_user_id(self):
+        """It should List only the Shopcarts of the given user_id"""
+        for user_id in (1, 1, 2):
+            self.client.post("/shopcarts", json={"user_id": user_id})
+
+        response = self.client.get("/shopcarts", query_string={"user_id": 1})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.get_json()
+        self.assertEqual(len(data), 2)
+        self.assertTrue(all(cart["user_id"] == 1 for cart in data))
+
+    def test_query_shopcarts_by_user_id_no_match(self):
+        """It should return an empty list when the user has no Shopcarts"""
+        self.client.post("/shopcarts", json={"user_id": 1})
+
+        response = self.client.get("/shopcarts", query_string={"user_id": 3})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), [])
+
+    def test_query_shopcarts_by_bad_user_id(self):
+        """It should not List Shopcarts when user_id is not an integer"""
+        self.client.post("/shopcarts", json={"user_id": 1})
+        for bad in ("abc", "1.5", ""):
+            with self.subTest(user_id=bad):
+                response = self.client.get("/shopcarts", query_string={"user_id": bad})
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(response.get_json()["error"], "Bad Request")
+
+    ######################################################################
     #  A D D   I T E M   T O   S H O P C A R T   (#9)
     ######################################################################
 

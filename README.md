@@ -102,7 +102,7 @@ The service provides the following endpoints.
 | GET | `/` | Return service information |
 | GET | `/health` | Health check for Kubernetes probes; returns `{"status": "OK"}` |
 | POST | `/shopcarts` | Create a shopping cart |
-| GET | `/shopcarts` | List all shopping carts |
+| GET | `/shopcarts` | List all shopping carts, or one customer's with `?user_id=` |
 | GET | `/shopcarts/{shopcart_id}` | Retrieve a shopping cart |
 | PUT | `/shopcarts/{shopcart_id}` | Update a shopping cart |
 | DELETE | `/shopcarts/{shopcart_id}` | Delete a shopping cart |
@@ -168,6 +168,14 @@ curl http://localhost:8080/shopcarts
 ```
 
 A successful request returns `200 OK` with a JSON array of shopcarts.
+
+To list only one customer's shopcarts, add `user_id`:
+
+```bash
+curl "http://localhost:8080/shopcarts?user_id=101"
+```
+
+This returns an empty array if the customer has no shopcarts, and `400 Bad Request` if `user_id` is not an integer.
 
 ### Retrieve a Shopping Cart
 
