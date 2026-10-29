@@ -46,6 +46,10 @@ jobs:
           python -m pip install -U pip pipenv
           pipenv install --system --dev
 
+      # make lint fails on any flake8 or pylint finding since #39
+      - name: Run flake8 and pylint
+        run: make lint
+
       - name: Run unit tests
         run: make test
         env:
