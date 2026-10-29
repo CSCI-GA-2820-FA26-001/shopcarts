@@ -111,6 +111,7 @@ The service provides the following endpoints.
 | GET | `/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
 | PUT | `/shopcarts/{shopcart_id}/items/{item_id}` | Update an existing item in a shopping cart |
 | DELETE | `/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
+| PUT | `/shopcarts/{shopcart_id}/checkout` | Check out a shopping cart (action) |
 
 ### Shopcart Data Model
 
@@ -142,7 +143,8 @@ An item contains:
 - Item `price` must be a finite, non-negative number (`price >= 0`).
 - The service assigns resource IDs; an item cannot be moved to another shopcart by specifying `shopcart_id` in its request body.
 - `400 Bad Request` is returned for invalid resource data.
-- `404 Not Found` is returned when a requested shopcart or item does not exist, or when an item does not belong to the specified shopcart.
+- `404 Not Found` is returned when a requested shopcart or item does not exist, or when an item does not belong to the specified shopcart. DELETE is the exception: it is idempotent, so it returns `204 No Content` even when the resource doesn't exist.
+- Checking out an empty shopcart returns `400 Bad Request`.
 - `405 Method Not Allowed` is returned for unsupported HTTP methods; `415 Unsupported Media Type` is returned for unsupported request media types.
 
 ## API Usage Examples
@@ -226,6 +228,14 @@ curl -X DELETE http://localhost:8080/shopcarts/1/items/1
 ```
 
 A successful deletion returns `204 No Content`.
+
+### Check Out a Shopping Cart
+
+```bash
+curl -X PUT http://localhost:8080/shopcarts/1/checkout
+```
+
+No request body is needed. A successful checkout returns `200 OK` with the shopcart and `"status": "CHECKED_OUT"`; its items are unchanged. Checking out a cart that is already checked out returns `200 OK` with the same shopcart. An empty shopcart returns `400 Bad Request`, and a missing shopcart returns `404 Not Found`.
 
 ## Testing and Code Quality
 

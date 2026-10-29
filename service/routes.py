@@ -284,3 +284,28 @@ def list_items(shopcart_id):
     app.logger.info("Returning %d Items", len(results))
 
     return jsonify(results), status.HTTP_200_OK
+
+
+######################################################################
+# CHECKOUT A SHOPCART (ACTION)
+######################################################################
+@app.route("/shopcarts/<int:shopcart_id>/checkout", methods=["PUT"])
+def checkout_shopcart(shopcart_id):
+    """
+    Checkout a Shopcart
+
+    This action moves a Shopcart to CHECKED_OUT. No request body is needed.
+    Checking out an already checked out cart returns it unchanged.
+    """
+    app.logger.info("Request to checkout Shopcart with id: %s", shopcart_id)
+
+    shopcart = Shopcart.find(shopcart_id)
+    if not shopcart:
+        abort(
+            status.HTTP_404_NOT_FOUND,
+            f"Shopcart with id '{shopcart_id}' could not be found.",
+        )
+
+    shopcart.checkout()
+
+    return jsonify(shopcart.serialize()), status.HTTP_200_OK
