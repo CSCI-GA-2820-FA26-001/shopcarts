@@ -93,6 +93,13 @@ Existing shopcarts become `OPEN` and keep their items. Running it again does not
 
 If you don't need the local data, `flask db-create` drops and recreates all tables instead.
 
+## PostgreSQL on Kubernetes
+
+Story #38 adds a PostgreSQL StatefulSet, persistent storage, and a headless Service
+under `k8s/postgres/`. See the [deployment and persistence-test guide](k8s/postgres/README.md)
+for Secret setup, K3D deployment, and a repeatable Pod-recreation test. This can be
+validated without deploying the Shopcarts API; API wiring belongs to Story #36.
+
 ## REST API Endpoints
 
 The service provides the following endpoints.
