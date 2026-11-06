@@ -18,7 +18,9 @@ Module: error_handlers
 """
 from flask import jsonify
 from flask import current_app as app  # Import Flask application
+from werkzeug.exceptions import HTTPException
 from service.models import DataValidationError
+from service.routes import api
 from . import status
 
 
@@ -98,3 +100,40 @@ def internal_server_error(error):
         ),
         status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
+
+
+######################################################################
+# Flask-RESTX Error Handlers
+######################################################################
+# Flask-RESTX handles the errors raised in its own resources, so the Flask
+# handlers above don't run for /api. These return the same JSON through them.
+FLASK_HANDLERS = {
+    status.HTTP_400_BAD_REQUEST: bad_request,
+    status.HTTP_404_NOT_FOUND: not_found,
+    status.HTTP_405_METHOD_NOT_ALLOWED: method_not_supported,
+    status.HTTP_415_UNSUPPORTED_MEDIA_TYPE: mediatype_not_supported,
+    status.HTTP_500_INTERNAL_SERVER_ERROR: internal_server_error,
+}
+
+
+def restx_response(result):
+    """Turns a Flask handler's (response, code) into the (dict, code) Flask-RESTX needs"""
+    response, code = result
+    return response.get_json(), code
+
+
+@api.errorhandler(DataValidationError)
+def api_request_validation_error(error):
+    """Handles Value Errors from bad data in the Flask-RESTX resources"""
+    return restx_response(request_validation_error(error))
+
+
+@api.errorhandler(HTTPException)
+def api_http_error(error):
+    """Handles HTTP errors in the Flask-RESTX resources"""
+    handler = FLASK_HANDLERS.get(error.code)
+    if handler is None:
+        message = str(error)
+        app.logger.warning(message)
+        return {"status": error.code, "error": error.name, "message": message}, error.code
+    return restx_response(handler(error))
