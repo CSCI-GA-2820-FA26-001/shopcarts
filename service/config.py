@@ -17,4 +17,6 @@ SQLALCHEMY_TRACK_MODIFICATIONS = False
 
 # Secret for session management
 SECRET_KEY = os.getenv("SECRET_KEY", "sup3r-s3cr3t")
+# Keep Flask-RESTX from adding "did you mean ..." to the 404 messages
+RESTX_ERROR_404_HELP = False
 LOGGING_LEVEL = logging.INFO
