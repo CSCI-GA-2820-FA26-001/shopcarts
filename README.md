@@ -279,6 +279,28 @@ This command runs Flake8 and Pylint against the application and test code.
 | `make run` | Start the application |
 | `make test` | Run tests with coverage |
 | `make lint` | Run Flake8 and Pylint |
+| `make build` | Build the `cluster-registry:5000/shopcarts:1.0` image |
+| `make cluster` | Create the local K3D cluster with a registry |
+| `make push` | Push the image to the cluster registry |
+| `make deploy` | Apply the manifests in `k8s/` |
+
+## Docker and Kubernetes
+
+The `Dockerfile` builds a Python 3.12 image with the runtime dependencies only. It runs gunicorn as a non-root user on `$PORT`, which defaults to 8080:
+
+```bash
+make build
+docker run --rm -p 8080:8080 -e DATABASE_URI=<postgres uri> cluster-registry:5000/shopcarts:1.0
+```
+
+`k8s/` deploys the service and its Postgres database to the K3D cluster, reachable at http://localhost:8080 through an Ingress. See [k8s/README.md](k8s/README.md) for the full steps, including the Secrets to create once:
+
+```bash
+make cluster
+make build push
+make deploy
+bash k8s/verify.sh
+```
 
 ## Project Structure
 
@@ -296,7 +318,9 @@ shopcarts/
 │   ├── test_cli_commands.py
 │   ├── test_models.py
 │   └── test_routes.py
+├── k8s/                    # Kubernetes manifests for the service and Postgres
 ├── wsgi.py                 # Application entry point
+├── Dockerfile              # Container image for the service
 ├── Procfile                # Application process configuration
 ├── Pipfile                 # Python dependencies
 ├── Makefile                # Development commands

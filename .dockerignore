@@ -1,0 +1,39 @@
+# Secrets and local settings
+.env
+.flaskenv
+dot-env-example
+
+# Version control and editor files
+.git
+.gitignore
+.gitattributes
+.github
+.devcontainer
+.vscode
+.DS_Store
+
+# Tests and test output
+tests
+features
+.coverage
+coverage.xml
+unittests.xml
+.pytest_cache
+htmlcov
+
+# Python cache
+__pycache__
+**/__pycache__
+*.py[cod]
+
+# Not needed in the image
+k8s
+.tekton
+config
+Makefile
+Procfile
+setup.cfg
+README.md
+LICENSE
+Dockerfile
+.dockerignore
