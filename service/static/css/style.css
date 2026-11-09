@@ -1,0 +1,10 @@
+/* Styles for the Shopcarts admin page, on top of Bootstrap */
+
+#flash_message:empty::after {
+  content: "Ready";
+  color: var(--bs-secondary-color);
+}
+
+#search_results tbody tr {
+  cursor: pointer;
+}

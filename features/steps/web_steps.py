@@ -86,6 +86,17 @@ def step_impl(context, text_string):
     assert text_string not in element.text
 
 
+@then('I should see the "{element_name}" field and the "{button}" button')
+def step_impl(context, element_name, button):
+    for element_id in (field_id(element_name), button_id(button)):
+        element = wait_for(
+            context,
+            expected_conditions.visibility_of_element_located((By.ID, element_id)),
+            f'"{element_id}" was not on the page',
+        )
+        assert element.is_enabled()
+
+
 ######################################################################
 # F O R M   S T E P S
 ######################################################################

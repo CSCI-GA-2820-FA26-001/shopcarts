@@ -69,7 +69,7 @@ Open:
 
 http://localhost:8080/
 
-The root endpoint returns JSON containing the service name, version, and Shopcarts collection URL.
+The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear already works.
 
 ### Upgrading an existing database
 
@@ -106,7 +106,7 @@ The service provides the following endpoints.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Return service information |
+| GET | `/` | The Shopcarts admin page |
 | GET | `/health` | Health check for Kubernetes probes; returns `{"status": "OK"}` |
 | POST | `/shopcarts` | Create a shopping cart |
 | GET | `/shopcarts` | List all shopping carts, or one customer's with `?user_id=` |
@@ -316,6 +316,7 @@ shopcarts/
 │   ├── config.py           # Application configuration
 │   ├── models.py           # Shopcart and Item models
 │   ├── routes.py           # REST API routes
+│   ├── static/             # Admin page: index.html, rest_api.js, Bootstrap and jQuery
 │   └── common/             # Error handling, logging, utilities
 ├── features/               # BDD scenarios
 │   ├── environment.py      # Browser setup for Behave
