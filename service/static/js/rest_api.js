@@ -97,4 +97,31 @@ $(function () {
             }
         });
     });
+
+    // ****************************************
+    //  R E T R I E V E   A   S H O P C A R T
+    // ****************************************
+    $("#retrieve-btn").click(function () {
+        const shopcart_id = $("#shopcart_id").val().trim();
+        if (!shopcart_id) {
+            flash_message("Enter a Shopcart ID to retrieve");
+            return;
+        }
+
+        flash_message("");
+        $.ajax({
+            type: "GET",
+            url: `${BASE_URL}/${encodeURIComponent(shopcart_id)}`,
+        })
+            .done(function (shopcart) {
+                update_form_data(shopcart);
+                flash_message("Success");
+            })
+            .fail(function (xhr) {
+                // Keep the ID that was typed, but drop the details of the last cart
+                $("#shopcart_user_id").val("");
+                $("#shopcart_status").val("");
+                flash_message(error_message(xhr));
+            });
+    });
 });
