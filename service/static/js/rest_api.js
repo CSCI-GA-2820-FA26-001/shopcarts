@@ -124,4 +124,11 @@ $(function () {
                 flash_message(error_message(xhr));
             });
     });
+
+    // ****************************************
+    //  L I S T   A L L   S H O P C A R T S
+    // ****************************************
+    $("#list-btn").click(function () {
+        load_results("");
+    });
 });
