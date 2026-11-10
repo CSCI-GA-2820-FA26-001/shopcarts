@@ -160,4 +160,31 @@ $(function () {
                 flash_message(error_message(xhr));
             });
     });
+
+    // ****************************************
+    //  D E L E T E   A   S H O P C A R T
+    // ****************************************
+    $("#delete-btn").click(function () {
+        const shopcart_id = $("#shopcart_id").val().trim();
+
+        if (!shopcart_id) {
+            flash_message("Enter a Shopcart ID to delete");
+            return;
+        }
+
+        flash_message("");
+
+        $.ajax({
+            type: "DELETE",
+            url: `${BASE_URL}/${encodeURIComponent(shopcart_id)}`,
+        })
+            .done(function () {
+                clear_form_data();
+                update_results([]);
+                flash_message("Shopcart has been deleted");
+            })
+            .fail(function (xhr) {
+                flash_message(error_message(xhr));
+            });
+    });
 });
