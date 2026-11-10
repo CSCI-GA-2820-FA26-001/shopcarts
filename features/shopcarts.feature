@@ -60,3 +60,23 @@ Scenario: Retrieve a shopcart that does not exist
     And I press the "Retrieve" button
     Then I should see the message "could not be found"
     And the "User ID" field should be empty
+
+Scenario: List all shopcarts
+    Given the following shopcarts
+        | user_id |
+        | 101     |
+        | 202     |
+    When I visit the "Home Page"
+    And I press the "List" button
+    Then I should see the message "Success"
+    And I should see 2 shopcarts in the results
+    And I should see "101" in the results
+    And I should see "202" in the results
+
+Scenario: List all shopcarts twice
+    When I visit the "Home Page"
+    And I press the "List" button
+    Then I should see the message "Success"
+    When I press the "List" button
+    Then I should see the message "Success"
+    And I should see 2 shopcarts in the results
