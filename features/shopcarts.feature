@@ -110,3 +110,12 @@ Scenario: Update a shopcart that does not exist
     And I set the "User ID" to "555"
     And I press the "Update" button
     Then I should see the message "could not be found"
+
+Scenario: Update a shopcart with a User ID that is not a number
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "User ID" to "abc"
+    And I press the "Update" button
+    Then I should see the message "user_id must be an integer"

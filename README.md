@@ -69,7 +69,7 @@ Open:
 
 http://localhost:8080/
 
-The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear, Search, Retrieve and List All already work. Search shows the shopcarts of the User ID you enter, or every shopcart when it is empty, and fills the form with the first result. Retrieve fills the form with the shopcart whose ID you enter. List All shows every shopcart and leaves the form alone.
+The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear, Search, Retrieve, List All and Update already work. Search shows the shopcarts of the User ID you enter, or every shopcart when it is empty, and fills the form with the first result. Retrieve fills the form with the shopcart whose ID you enter. List All shows every shopcart and leaves the form alone. Update changes the User ID of the shopcart in the form and keeps its items.
 
 ### Upgrading an existing database
 
