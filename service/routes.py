@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Shopcart
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
 from flask_restx import Api, Resource, fields
 from service.models import Shopcart, Item, SHOPCART_STATUSES
@@ -33,16 +33,9 @@ from service.common import status  # HTTP Status Codes
 ######################################################################
 @app.route("/")
 def index():
-    """Root URL response"""
+    """Serves the admin page"""
     app.logger.info("Request for Root URL")
-    return (
-        jsonify(
-            name="Shopcart REST API Service",
-            version="1.0",
-            paths=url_for("shopcart_collection", _external=True),
-        ),
-        status.HTTP_200_OK,
-    )
+    return app.send_static_file("index.html")
 
 
 ######################################################################
