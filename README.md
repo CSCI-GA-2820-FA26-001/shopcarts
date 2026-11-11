@@ -270,6 +270,32 @@ make lint
 
 This command runs Flake8 and Pylint against the application and test code.
 
+### Run the BDD Tests
+
+The Behave scenarios in `features/` drive the admin web page in a headless browser with Selenium. The Dev Container is built from `quay.io/rofrano/pipeline-selenium`, which includes Chromium, Firefox and their drivers. If you opened the container before this change, rebuild it with **Dev Containers: Rebuild Container**.
+
+Start the service in one terminal:
+
+```bash
+honcho start
+```
+
+Then run the scenarios in another:
+
+```bash
+behave
+```
+
+`behave` exits with a non-zero code if any step fails. These environment variables change how it runs:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8080` | Where the service is running |
+| `WAIT_SECONDS` | `30` | How long a step waits for the page |
+| `DRIVER` | `chrome` | `chrome` or `firefox` |
+
+Each scenario starts with `Given the following shopcarts`, which deletes every shopcart through the REST API and creates one per table row. `Given the following items in the shopcart of customer "<user_id>"` adds items to that customer's shopcart. The browser steps in `features/steps/web_steps.py` find fields and buttons by their label: the "User ID" field is `shopcart_user_id` and the "Search" button is `search-btn`. Every button handler on the page empties the `flash_message` when it is pressed and sets it when its request finishes, so `I should not see "<user_id>" in the results` waits for that message before it reads the table.
+
 ### Available Development Commands
 
 | Command | Purpose |
@@ -313,6 +339,10 @@ shopcarts/
 │   ├── models.py           # Shopcart and Item models
 │   ├── routes.py           # REST API routes
 │   └── common/             # Error handling, logging, utilities
+├── features/               # BDD scenarios
+│   ├── environment.py      # Browser setup for Behave
+│   ├── shopcarts.feature
+│   └── steps/              # Data loading and web page steps
 ├── tests/
 │   ├── factories.py        # Test data factories
 │   ├── test_cli_commands.py
