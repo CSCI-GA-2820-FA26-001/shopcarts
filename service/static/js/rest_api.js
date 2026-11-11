@@ -52,6 +52,28 @@ function error_message(xhr) {
     return `Server error: ${xhr.status}`;
 }
 
+// Shows the Shopcarts of a customer in the results table, or every
+// Shopcart when user_id is empty. Returns the request so callers can
+// add their own done() handler.
+function load_results(user_id) {
+    const query = user_id ? `?user_id=${encodeURIComponent(user_id)}` : "";
+
+    // Clear the old message so a step can't match it before this request ends
+    flash_message("");
+    return $.ajax({
+        type: "GET",
+        url: BASE_URL + query,
+    })
+        .done(function (shopcarts) {
+            update_results(shopcarts);
+            flash_message("Success");
+        })
+        .fail(function (xhr) {
+            update_results([]);
+            flash_message(error_message(xhr));
+        });
+}
+
 $(function () {
     // ****************************************
     //  C L E A R   T H E   F O R M
@@ -59,5 +81,20 @@ $(function () {
     $("#clear-btn").click(function () {
         clear_form_data();
         flash_message("");
+    });
+
+    // ****************************************
+    //  S E A R C H   B Y   C U S T O M E R
+    // ****************************************
+    $("#search-btn").click(function () {
+        load_results($("#shopcart_user_id").val().trim()).done(function (shopcarts) {
+            // Fill the form with the first result, so a cart can be found by its customer
+            if (shopcarts.length > 0) {
+                update_form_data(shopcarts[0]);
+            } else {
+                $("#shopcart_id").val("");
+                $("#shopcart_status").val("");
+            }
+        });
     });
 });

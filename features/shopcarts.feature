@@ -23,3 +23,16 @@ Scenario: Clear the form
     And I set the "User ID" to "101"
     And I press the "Clear" button
     Then the "User ID" field should be empty
+
+Scenario: Search shopcarts by customer
+    Given the following shopcarts
+        | user_id |
+        | 101     |
+        | 101     |
+        | 202     |
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    And I should see 2 shopcarts in the results
+    And I should not see "202" in the results
