@@ -51,7 +51,7 @@ The shopcarts pods wait for Postgres in an init container, then start. Expect bo
 to be `Running` with `1/1` Ready.
 
 ```bash
-curl http://localhost:8080/shopcarts
+curl http://localhost:8080/api/shopcarts
 ```
 
 After pushing a new image with the same tag, restart the pods to pull it:
@@ -66,7 +66,7 @@ kubectl --context k3d-nyu-devops -n default rollout restart deployment/shopcarts
 bash k8s/verify.sh
 ```
 
-It checks that the pods are Ready, that `GET /shopcarts` works through the ingress,
+It checks that the pods are Ready, that `GET /api/shopcarts` works through the ingress,
 that a shopcart created with `POST` can be read back from its `Location`, and that
 the credentials come from Secrets. It deletes the shopcart it creates. All `PASS`
 messages must appear and the script must exit with status 0.
