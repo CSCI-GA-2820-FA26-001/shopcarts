@@ -294,7 +294,7 @@ behave
 | `WAIT_SECONDS` | `30` | How long a step waits for the page |
 | `DRIVER` | `chrome` | `chrome` or `firefox` |
 
-Each scenario starts with `Given the following shopcarts`, which deletes every shopcart through the REST API and creates one per table row. `Given the following items in the shopcart of customer "<user_id>"` adds items to that customer's shopcart. The browser steps in `features/steps/web_steps.py` find fields and buttons by their label: the "User ID" field is `shopcart_user_id` and the "Search" button is `search-btn`.
+Each scenario starts with `Given the following shopcarts`, which deletes every shopcart through the REST API and creates one per table row. `Given the following items in the shopcart of customer "<user_id>"` adds items to that customer's shopcart. The browser steps in `features/steps/web_steps.py` find fields and buttons by their label: the "User ID" field is `shopcart_user_id` and the "Search" button is `search-btn`. Every button handler on the page empties the `flash_message` when it is pressed and sets it when its request finishes, so `I should not see "<user_id>" in the results` waits for that message before it reads the table.
 
 ### Available Development Commands
 

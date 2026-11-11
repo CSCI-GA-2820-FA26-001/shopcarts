@@ -174,6 +174,14 @@ def step_impl(context, user_id):
 
 @then('I should not see "{user_id}" in the results')
 def step_impl(context, user_id):
+    # Checking right after a button press would pass before the new results arrive.
+    # Every button empties the flash message when pressed and sets it when its
+    # request finishes, so wait for a message before reading the table.
+    wait_for(
+        context,
+        lambda driver: driver.find_element(By.ID, FLASH_MESSAGE_ID).text.strip() != "",
+        "The request did not finish: no message was shown",
+    )
     user_ids = result_user_ids(context)
     assert user_id not in user_ids, f'User ID "{user_id}" was in the results: {user_ids}'
 
