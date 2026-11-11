@@ -80,3 +80,42 @@ Scenario: List all shopcarts twice
     When I press the "List" button
     Then I should see the message "Success"
     And I should see 2 shopcarts in the results
+
+Scenario: Update a shopcart's customer
+    Given the following shopcarts
+        | user_id |
+        | 101     |
+    And the following items in the shopcart of customer "101"
+        | product_id | name     | quantity | price |
+        | 1001       | Notebook | 2        | 12.99 |
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "User ID" to "555"
+    And I press the "Update" button
+    Then I should see the message "Success"
+    When I copy the "Shopcart ID" field
+    And I press the "Clear" button
+    And I paste the "Shopcart ID" field
+    And I press the "Retrieve" button
+    Then I should see the message "Success"
+    And the "User ID" field should contain "555"
+    And the "Status" field should contain "OPEN"
+    And the shopcart of customer "555" should have 1 item
+
+Scenario: Update a shopcart that does not exist
+    When I visit the "Home Page"
+    And I set the "Shopcart ID" to "0"
+    And I set the "User ID" to "555"
+    And I press the "Update" button
+    Then I should see the message "could not be found"
+
+Scenario: Update a shopcart with a User ID that is not a number
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "User ID" to "abc"
+    And I press the "Update" button
+    Then I should see the message "user_id must be an integer"

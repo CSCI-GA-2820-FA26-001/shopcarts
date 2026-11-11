@@ -131,4 +131,33 @@ $(function () {
     $("#list-btn").click(function () {
         load_results("");
     });
+
+    // ****************************************
+    //  U P D A T E   A   S H O P C A R T
+    // ****************************************
+    $("#update-btn").click(function () {
+        const shopcart_id = $("#shopcart_id").val().trim();
+        const user_id = $("#shopcart_user_id").val().trim();
+        if (!shopcart_id || !user_id) {
+            flash_message("Enter a Shopcart ID and a User ID to update");
+            return;
+        }
+
+        flash_message("");
+        $.ajax({
+            type: "PUT",
+            url: `${BASE_URL}/${encodeURIComponent(shopcart_id)}`,
+            contentType: "application/json",
+            // No "items", so the API keeps the Items of the Shopcart.
+            // A User ID that isn't a whole number is sent as is for the API to reject.
+            data: JSON.stringify({ user_id: Number.isInteger(Number(user_id)) ? Number(user_id) : user_id }),
+        })
+            .done(function (shopcart) {
+                update_form_data(shopcart);
+                flash_message("Success");
+            })
+            .fail(function (xhr) {
+                flash_message(error_message(xhr));
+            });
+    });
 });
