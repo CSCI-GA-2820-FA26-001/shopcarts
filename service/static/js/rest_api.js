@@ -6,8 +6,8 @@
  * and checkout (#56). Only Clear is set up here.
  */
 
-// The Shopcart API. This becomes "/api/shopcarts" once #54 is merged.
-const BASE_URL = "/shopcarts";
+// The Shopcart API, documented at /apidocs/
+const BASE_URL = "/api/shopcarts";
 
 // ****************************************
 //  U T I L I T Y   F U N C T I O N S

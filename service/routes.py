@@ -21,9 +21,10 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Shopcart
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
-from service.models import Shopcart, Item
+from flask_restx import Api, Resource, fields
+from service.models import Shopcart, Item, SHOPCART_STATUSES
 from service.common import status  # HTTP Status Codes
 
 
@@ -47,127 +48,218 @@ def health():
 
 
 ######################################################################
+# Configure Swagger before initializing it
+######################################################################
+api = Api(
+    app,
+    version="1.0.0",
+    title="Shopcart REST API Service",
+    description="This is the Shopcarts service of the NYU DevOps eCommerce project.",
+    default="shopcarts",
+    default_label="Shopcart operations",
+    doc="/apidocs/",
+    prefix="/api",
+)
+
+# Define the models so that the docs reflect what can be sent
+item_create_model = api.model(
+    "ItemCreate",
+    {
+        "product_id": fields.Integer(required=True, description="The product identifier"),
+        "name": fields.String(required=True, description="The name of the product"),
+        "quantity": fields.Integer(required=True, description="The number of units (> 0)"),
+        "price": fields.Float(required=True, description="The unit price (>= 0)"),
+    },
+)
+
+item_model = api.clone(
+    "Item",
+    item_create_model,
+    {
+        "id": fields.Integer(readonly=True, description="The unique id assigned internally by service"),
+        "shopcart_id": fields.Integer(readonly=True, description="The id of the Shopcart the Item belongs to"),
+    },
+)
+
+create_model = api.model(
+    "ShopcartCreate",
+    {
+        "user_id": fields.Integer(required=True, description="The id of the customer the Shopcart belongs to"),
+        "items": fields.List(
+            fields.Nested(item_create_model),
+            description="The Items of the Shopcart. On update, replaces the current Items if sent",
+        ),
+    },
+)
+
+shopcart_model = api.clone(
+    "Shopcart",
+    create_model,
+    {
+        "id": fields.Integer(readonly=True, description="The unique id assigned internally by service"),
+        "status": fields.String(
+            readonly=True,
+            enum=list(SHOPCART_STATUSES),
+            description="OPEN until the Shopcart is checked out. Set by the service only",
+        ),
+        "created_at": fields.DateTime(readonly=True, description="When the Shopcart was created"),
+        "last_updated": fields.DateTime(readonly=True, description="When the Shopcart or its Items last changed"),
+        "items": fields.List(fields.Nested(item_model), description="The Items of the Shopcart"),
+    },
+)
+
+
+######################################################################
 #  R E S T   A P I   E N D P O I N T S
 ######################################################################
 
 
 ######################################################################
-# READ A SHOPCART
+#  PATH: /shopcarts/{id}
 ######################################################################
-@app.route("/shopcarts/<int:shopcart_id>", methods=["GET"])
-def get_shopcarts(shopcart_id):
+@api.route("/shopcarts/<int:shopcart_id>")
+@api.param("shopcart_id", "The Shopcart identifier")
+class ShopcartResource(Resource):
     """
-    Retrieve a single Shopcart
+    ShopcartResource class
 
-    This endpoint will return a Shopcart and its Items based on its id
+    Allows the manipulation of a single Shopcart
+    GET /shopcarts/{id} - Returns a Shopcart with the id
+    PUT /shopcarts/{id} - Update a Shopcart with the id
+    DELETE /shopcarts/{id} - Deletes a Shopcart with the id
     """
-    app.logger.info("Request to read a Shopcart with id: %s", shopcart_id)
 
-    shopcart = Shopcart.find(shopcart_id)
-    if not shopcart:
-        abort(
-            status.HTTP_404_NOT_FOUND,
-            f"Shopcart with id '{shopcart_id}' could not be found.",
-        )
+    # ------------------------------------------------------------------
+    # RETRIEVE A SHOPCART
+    # ------------------------------------------------------------------
+    @api.doc("get_shopcart")
+    @api.response(404, "Shopcart not found")
+    @api.marshal_with(shopcart_model)
+    def get(self, shopcart_id):
+        """
+        Retrieve a single Shopcart
 
-    return jsonify(shopcart.serialize()), status.HTTP_200_OK
+        This endpoint will return a Shopcart and its Items based on its id
+        """
+        app.logger.info("Request to read a Shopcart with id: %s", shopcart_id)
 
+        shopcart = Shopcart.find(shopcart_id)
+        if not shopcart:
+            abort(
+                status.HTTP_404_NOT_FOUND,
+                f"Shopcart with id '{shopcart_id}' could not be found.",
+            )
 
-######################################################################
-# UPDATE AN EXISTING SHOPCART
-######################################################################
-@app.route("/shopcarts/<int:shopcart_id>", methods=["PUT"])
-def update_shopcart(shopcart_id):
-    """
-    Update a Shopcart
+        return shopcart.serialize(), status.HTTP_200_OK
 
-    This endpoint will update a Shopcart based on the body that is posted.
-    If "items" is sent, it replaces the Items of the Shopcart.
-    """
-    app.logger.info("Request to update a Shopcart with id: %s", shopcart_id)
+    # ------------------------------------------------------------------
+    # UPDATE AN EXISTING SHOPCART
+    # ------------------------------------------------------------------
+    @api.doc("update_shopcart")
+    @api.response(404, "Shopcart not found")
+    @api.response(400, "The posted Shopcart data was not valid")
+    @api.response(415, "The request was not JSON")
+    @api.expect(create_model)
+    @api.marshal_with(shopcart_model)
+    def put(self, shopcart_id):
+        """
+        Update a Shopcart
 
-    shopcart = Shopcart.find(shopcart_id)
-    if not shopcart:
-        abort(
-            status.HTTP_404_NOT_FOUND,
-            f"Shopcart with id '{shopcart_id}' could not be found.",
-        )
+        This endpoint will update a Shopcart based on the body that is posted.
+        If "items" is sent, it replaces the Items of the Shopcart.
+        """
+        app.logger.info("Request to update a Shopcart with id: %s", shopcart_id)
 
-    shopcart.deserialize(request.get_json())
-    shopcart.update()
+        shopcart = Shopcart.find(shopcart_id)
+        if not shopcart:
+            abort(
+                status.HTTP_404_NOT_FOUND,
+                f"Shopcart with id '{shopcart_id}' could not be found.",
+            )
 
-    return jsonify(shopcart.serialize()), status.HTTP_200_OK
+        shopcart.deserialize(request.get_json())
+        shopcart.update()
 
+        return shopcart.serialize(), status.HTTP_200_OK
 
-######################################################################
-# CREATE A SHOPCART
-######################################################################
-@app.route("/shopcarts", methods=["POST"])
-def create_shopcart():
-    """Creates a new Shopcart"""
-    app.logger.info("Request to create a Shopcart")
+    # ------------------------------------------------------------------
+    # DELETE A SHOPCART
+    # ------------------------------------------------------------------
+    @api.doc("delete_shopcart")
+    @api.response(204, "Shopcart deleted")
+    def delete(self, shopcart_id):
+        """
+        Delete a Shopcart
 
-    data = request.get_json()
-    shopcart = Shopcart()
-    shopcart.deserialize(data)
-    shopcart.create()
+        This endpoint will delete a Shopcart and its Items based on the id specified in the path.
+        DELETE is idempotent, so it returns 204 even if the Shopcart doesn't exist.
+        """
+        app.logger.info("Request to delete a Shopcart with id: %s", shopcart_id)
 
-    location_url = url_for("get_shopcarts", shopcart_id=shopcart.id, _external=True)
+        shopcart = Shopcart.find(shopcart_id)
+        if shopcart:
+            shopcart.delete()
+            app.logger.info("Shopcart with id [%s] deleted", shopcart_id)
 
-    return (
-        jsonify(shopcart.serialize()),
-        status.HTTP_201_CREATED,
-        {"Location": location_url},
-    )
-
-
-######################################################################
-# DELETE A SHOPCART
-######################################################################
-@app.route("/shopcarts/<int:shopcart_id>", methods=["DELETE"])
-def delete_shopcart(shopcart_id):
-    """
-    Delete a Shopcart
-
-    This endpoint will delete a Shopcart and its Items based on the id specified in the path.
-    DELETE is idempotent, so it returns 204 even if the Shopcart doesn't exist.
-    """
-    app.logger.info("Request to delete a Shopcart with id: %s", shopcart_id)
-
-    shopcart = Shopcart.find(shopcart_id)
-    if shopcart:
-        shopcart.delete()
-        app.logger.info("Shopcart with id [%s] deleted", shopcart_id)
-
-    return "", status.HTTP_204_NO_CONTENT
+        return "", status.HTTP_204_NO_CONTENT
 
 
 ######################################################################
-# LIST ALL SHOPCARTS
+#  PATH: /shopcarts
 ######################################################################
-@app.route("/shopcarts", methods=["GET"])
-def list_shopcarts():
-    """
-    Returns all of the Shopcarts and their Items
+@api.route("/shopcarts", strict_slashes=False)
+class ShopcartCollection(Resource):
+    """Handles all interactions with collections of Shopcarts"""
 
-    ?user_id=<int> returns only the Shopcarts of that user.
-    """
-    app.logger.info("Request to list Shopcarts")
+    # ------------------------------------------------------------------
+    # LIST ALL SHOPCARTS
+    # ------------------------------------------------------------------
+    @api.doc("list_shopcarts")
+    @api.response(400, "user_id was not an integer")
+    @api.marshal_list_with(shopcart_model)
+    def get(self):
+        """
+        Returns all of the Shopcarts and their Items
 
-    user_id = request.args.get("user_id")
-    if user_id is None:
-        shopcarts = Shopcart.all()
-    else:
-        try:
-            user_id = int(user_id)
-        except ValueError:
-            abort(status.HTTP_400_BAD_REQUEST, "user_id must be an integer")
-        shopcarts = Shopcart.find_by_user_id(user_id)
+        ?user_id=<int> returns only the Shopcarts of that user.
+        """
+        app.logger.info("Request to list Shopcarts")
 
-    results = [shopcart.serialize() for shopcart in shopcarts]
-    app.logger.info("Returning %d Shopcarts", len(results))
+        user_id = request.args.get("user_id")
+        if user_id is None:
+            shopcarts = Shopcart.all()
+        else:
+            try:
+                user_id = int(user_id)
+            except ValueError:
+                abort(status.HTTP_400_BAD_REQUEST, "user_id must be an integer")
+            shopcarts = Shopcart.find_by_user_id(user_id)
 
-    return jsonify(results), status.HTTP_200_OK
+        results = [shopcart.serialize() for shopcart in shopcarts]
+        app.logger.info("Returning %d Shopcarts", len(results))
+
+        return results, status.HTTP_200_OK
+
+    # ------------------------------------------------------------------
+    # CREATE A SHOPCART
+    # ------------------------------------------------------------------
+    @api.doc("create_shopcart")
+    @api.response(400, "The posted Shopcart data was not valid")
+    @api.response(415, "The request was not JSON")
+    @api.expect(create_model)
+    @api.marshal_with(shopcart_model, code=201)
+    def post(self):
+        """Creates a new Shopcart"""
+        app.logger.info("Request to create a Shopcart")
+
+        data = request.get_json()
+        shopcart = Shopcart()
+        shopcart.deserialize(data)
+        shopcart.create()
+
+        location_url = api.url_for(ShopcartResource, shopcart_id=shopcart.id, _external=True)
+
+        return shopcart.serialize(), status.HTTP_201_CREATED, {"Location": location_url}
 
 
 ######################################################################

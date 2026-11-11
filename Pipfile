@@ -10,6 +10,7 @@ psycopg = {extras = ["binary"], version = "==3.3.2"}
 retry2 = "==0.9.5"
 python-dotenv = "~=1.2.2"
 gunicorn = "~=25.0.0"
+flask-restx = "~=1.3.2"
 
 [dev-packages]
 # Code Quality

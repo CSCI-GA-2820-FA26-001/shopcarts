@@ -33,8 +33,8 @@ HTTP_204_NO_CONTENT = 204
 
 WAIT_TIMEOUT = 60
 
-# The Shopcart routes move to /api/shopcarts in #54 and the Item routes in #59
-SHOPCARTS_URL = "/shopcarts"
+# The Item routes move to /api/shopcarts in #59
+SHOPCARTS_URL = "/api/shopcarts"
 ITEMS_URL = "/shopcarts/{shopcart_id}/items"
 
 

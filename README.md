@@ -25,6 +25,7 @@ Each shopcart belongs to a user and can contain multiple items. Each item stores
 
 - **Python 3.12** — Programming language
 - **Flask** — REST API framework
+- **Flask-RESTX** — REST resources and Swagger documentation
 - **Flask-SQLAlchemy** — Database models and persistence
 - **PostgreSQL** — Relational database
 - **Pytest and pytest-cov** — Automated testing and coverage
@@ -71,6 +72,8 @@ http://localhost:8080/
 
 The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear, Search, Retrieve, List All and Update already work. Search shows the shopcarts of the User ID you enter, or every shopcart when it is empty, and fills the form with the first result. Retrieve fills the form with the shopcart whose ID you enter. List All shows every shopcart and leaves the form alone. Update changes the User ID of the shopcart in the form and keeps its items.
 
+The Swagger UI at http://localhost:8080/apidocs/ documents the endpoints under `/api` and lets you try them.
+
 ### Upgrading an existing database
 
 The service creates its tables with `db.create_all()` when it starts. That creates missing tables but never adds columns to tables that already exist. A database created before the shopcart `status` field was added fails with `column shopcart.status does not exist`. Fresh databases, including the one CI uses, are not affected.
@@ -102,17 +105,18 @@ validated without deploying the Shopcarts API; API wiring belongs to Story #36.
 
 ## REST API Endpoints
 
-The service provides the following endpoints.
+The service provides the following endpoints. The Shopcart endpoints are under `/api` and documented at `/apidocs/`. The Item and checkout endpoints move under `/api` in #59 and #60.
 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/` | The Shopcarts admin page |
 | GET | `/health` | Health check for Kubernetes probes; returns `{"status": "OK"}` |
-| POST | `/shopcarts` | Create a shopping cart |
-| GET | `/shopcarts` | List all shopping carts, or one customer's with `?user_id=` |
-| GET | `/shopcarts/{shopcart_id}` | Retrieve a shopping cart |
-| PUT | `/shopcarts/{shopcart_id}` | Update a shopping cart |
-| DELETE | `/shopcarts/{shopcart_id}` | Delete a shopping cart |
+| GET | `/apidocs/` | Swagger UI for the `/api` endpoints |
+| POST | `/api/shopcarts` | Create a shopping cart |
+| GET | `/api/shopcarts` | List all shopping carts, or one customer's with `?user_id=` |
+| GET | `/api/shopcarts/{shopcart_id}` | Retrieve a shopping cart |
+| PUT | `/api/shopcarts/{shopcart_id}` | Update a shopping cart |
+| DELETE | `/api/shopcarts/{shopcart_id}` | Delete a shopping cart |
 | POST | `/shopcarts/{shopcart_id}/items` | Add an item to a shopping cart |
 | GET | `/shopcarts/{shopcart_id}/items` | List items in a shopping cart |
 | GET | `/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
@@ -161,7 +165,7 @@ These examples assume that the application is running on `localhost:8080`.
 ### Create a Shopping Cart
 
 ```bash
-curl -X POST http://localhost:8080/shopcarts \
+curl -X POST http://localhost:8080/api/shopcarts \
   -H "Content-Type: application/json" \
   -d '{"user_id": 101}'
 ```
@@ -171,7 +175,7 @@ A successful request returns `201 Created` with the new shopcart.
 ### List Shopping Carts
 
 ```bash
-curl http://localhost:8080/shopcarts
+curl http://localhost:8080/api/shopcarts
 ```
 
 A successful request returns `200 OK` with a JSON array of shopcarts.
@@ -179,7 +183,7 @@ A successful request returns `200 OK` with a JSON array of shopcarts.
 To list only one customer's shopcarts, add `user_id`:
 
 ```bash
-curl "http://localhost:8080/shopcarts?user_id=101"
+curl "http://localhost:8080/api/shopcarts?user_id=101"
 ```
 
 This returns an empty array if the customer has no shopcarts, and `400 Bad Request` if `user_id` is not an integer.
@@ -187,7 +191,7 @@ This returns an empty array if the customer has no shopcarts, and `400 Bad Reque
 ### Retrieve a Shopping Cart
 
 ```bash
-curl http://localhost:8080/shopcarts/1
+curl http://localhost:8080/api/shopcarts/1
 ```
 
 Replace `1` with an existing shopcart ID.

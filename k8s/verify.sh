@@ -16,19 +16,19 @@ echo "PASS: The shopcarts pods are Running and Ready."
 # The ingress can take a few seconds to route to new pods
 status=""
 for attempt in {1..30}; do
-    status="$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/shopcarts" || true)"
+    status="$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/api/shopcarts" || true)"
     if [[ "$status" = 200 ]]; then
         break
     fi
     sleep 2
 done
 test "$status" = 200
-curl -sf "$BASE_URL/shopcarts" | python3 -c 'import json, sys; assert isinstance(json.load(sys.stdin), list)'
-echo "PASS: GET $BASE_URL/shopcarts returns 200 OK with a JSON list."
+curl -sf "$BASE_URL/api/shopcarts" | python3 -c 'import json, sys; assert isinstance(json.load(sys.stdin), list)'
+echo "PASS: GET $BASE_URL/api/shopcarts returns 200 OK with a JSON list."
 
 headers="$(mktemp)"
 trap 'rm -f "$headers"' EXIT
-created="$(curl -sf -D "$headers" -X POST "$BASE_URL/shopcarts" \
+created="$(curl -sf -D "$headers" -X POST "$BASE_URL/api/shopcarts" \
     -H 'Content-Type: application/json' -d '{"user_id": 3636}')"
 grep -q '^HTTP/[0-9.]* 201' "$headers"
 location="$(grep -i '^location:' "$headers" | tr -d '\r' | awk '{print $2}')"

@@ -23,14 +23,17 @@ import os
 import logging
 from datetime import datetime
 from unittest import TestCase
+from werkzeug.exceptions import Conflict
 from wsgi import app
-from service.common import status
+from service.common import status, error_handlers
 from service.models import db, Shopcart, Item
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
-BASE_URL = "/shopcarts"
+BASE_URL = "/api/shopcarts"
+# The Item routes move to /api in #59 and checkout in #60
+LEGACY_URL = "/shopcarts"
 
 
 def make_item(**overrides):
@@ -123,6 +126,86 @@ class TestYourResourceService(TestCase):
         self.assertEqual(resp.get_json(), {"status": "OK"})
 
     ######################################################################
+    #  F L A S K - R E S T X   A N D   S W A G G E R   (#54)
+    ######################################################################
+
+    def test_apidocs(self):
+        """It should serve the Swagger UI at /apidocs/"""
+        resp = self.client.get("/apidocs/")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn(b"swagger", resp.data.lower())
+
+        resp = self.client.get("/apidocs", follow_redirects=True)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.request.path, "/apidocs/")
+
+    def test_swagger_spec_shopcarts(self):
+        """It should document the Shopcart endpoints and models in the Swagger spec"""
+        resp = self.client.get("/api/swagger.json")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        spec = resp.get_json()
+        self.assertEqual(spec["basePath"], "/api")
+        self.assertEqual(set(spec["paths"]["/shopcarts"]), {"get", "post"})
+        self.assertTrue({"get", "put", "delete"} <= set(spec["paths"]["/shopcarts/{shopcart_id}"]))
+        self.assertIn("ShopcartCreate", spec["definitions"])
+        self.assertIn("Shopcart", spec["definitions"])
+        create_fields = spec["definitions"]["ShopcartCreate"]["properties"]
+        self.assertEqual(set(create_fields), {"user_id", "items"})
+        self.assertEqual(spec["definitions"]["ShopcartCreate"]["required"], ["user_id"])
+        shopcart_fields = spec["definitions"]["Shopcart"]["properties"]
+        self.assertEqual(
+            set(shopcart_fields),
+            {"id", "user_id", "status", "created_at", "last_updated", "items"},
+        )
+
+    def test_shopcart_routes_only_under_api(self):
+        """It should not serve the Shopcart routes outside /api"""
+        shopcart = self._create_shopcart()
+        for url in ("/shopcarts", f"/shopcarts/{shopcart.id}"):
+            with self.subTest(url=url):
+                resp = self.client.get(url)
+                self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_not_found_message_unchanged(self):
+        """It should not add Flask-RESTX hints to the 404 message"""
+        response = self.client.get(f"{BASE_URL}/0")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(
+            response.get_json(),
+            {
+                "status": status.HTTP_404_NOT_FOUND,
+                "error": "Not Found",
+                "message": "404 Not Found: Shopcart with id '0' could not be found.",
+            },
+        )
+
+    def test_swagger_models_keep_the_json(self):
+        """It should return the same Shopcart JSON as before the Swagger models"""
+        created = self.client.post(
+            BASE_URL, json={"user_id": 1, "items": [make_item()]}
+        ).get_json()
+        expected = Shopcart.find(created["id"]).serialize()
+
+        self.assertEqual(created, expected)
+        self.assertEqual(self.client.get(f"{BASE_URL}/{created['id']}").get_json(), expected)
+        self.assertEqual(self.client.get(BASE_URL).get_json(), [expected])
+
+    def test_api_http_error_other_codes(self):
+        """It should return JSON for an HTTP error without its own handler"""
+        response, code = error_handlers.api_http_error(Conflict("Shopcart is locked"))
+
+        self.assertEqual(code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            response,
+            {
+                "status": status.HTTP_409_CONFLICT,
+                "error": "Conflict",
+                "message": "409 Conflict: Shopcart is locked",
+            },
+        )
+
+    ######################################################################
     #  R E A D   A   S H O P C A R T   (#5)
     ######################################################################
 
@@ -131,7 +214,7 @@ class TestYourResourceService(TestCase):
         shopcart = Shopcart(user_id=123)
         shopcart.create()
 
-        response = self.client.get(f"/shopcarts/{shopcart.id}")
+        response = self.client.get(f"{BASE_URL}/{shopcart.id}")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -155,9 +238,9 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
             ],
         }
-        created = self.client.post("/shopcarts", json=payload).get_json()
+        created = self.client.post(BASE_URL, json=payload).get_json()
 
-        response = self.client.get(f"/shopcarts/{created['id']}")
+        response = self.client.get(f"{BASE_URL}/{created['id']}")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -169,7 +252,7 @@ class TestYourResourceService(TestCase):
 
     def test_get_shopcart_from_location(self):
         """It should Read a Shopcart at the Location returned by Create"""
-        response = self.client.post("/shopcarts", json={"user_id": 123})
+        response = self.client.post(BASE_URL, json={"user_id": 123})
         location = response.headers["Location"]
 
         response = self.client.get(location)
@@ -179,7 +262,7 @@ class TestYourResourceService(TestCase):
 
     def test_get_shopcart_not_found(self):
         """It should not Read a Shopcart that does not exist"""
-        response = self.client.get("/shopcarts/0")
+        response = self.client.get(f"{BASE_URL}/0")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         data = response.get_json()
@@ -192,9 +275,9 @@ class TestYourResourceService(TestCase):
 
     def test_update_shopcart(self):
         """It should Update a Shopcart"""
-        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 123}).get_json()
 
-        response = self.client.put(f"/shopcarts/{created['id']}", json={"user_id": 456})
+        response = self.client.put(f"{BASE_URL}/{created['id']}", json={"user_id": 456})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -202,7 +285,7 @@ class TestYourResourceService(TestCase):
         self.assertEqual(data["user_id"], 456)
         self.assertEqual(data["created_at"], created["created_at"])
 
-        response = self.client.get(f"/shopcarts/{created['id']}")
+        response = self.client.get(f"{BASE_URL}/{created['id']}")
         self.assertEqual(response.get_json()["user_id"], 456)
         self.assertEqual(len(Shopcart.all()), 1)
 
@@ -220,12 +303,12 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
             ],
         }
-        created = self.client.post("/shopcarts", json=payload).get_json()
+        created = self.client.post(BASE_URL, json=payload).get_json()
 
         payload["items"] = [
             {"product_id": 1001, "name": "Product A", "quantity": 5, "price": 24.99},
         ]
-        response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
+        response = self.client.put(f"{BASE_URL}/{created['id']}", json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -243,10 +326,10 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
             ],
         }
-        created = self.client.post("/shopcarts", json=payload).get_json()
+        created = self.client.post(BASE_URL, json=payload).get_json()
 
         response = self.client.put(
-            f"/shopcarts/{created['id']}", json={"user_id": 123, "items": []}
+            f"{BASE_URL}/{created['id']}", json={"user_id": 123, "items": []}
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -261,9 +344,9 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
             ],
         }
-        created = self.client.post("/shopcarts", json=payload).get_json()
+        created = self.client.post(BASE_URL, json=payload).get_json()
 
-        response = self.client.put(f"/shopcarts/{created['id']}", json={"user_id": 456})
+        response = self.client.put(f"{BASE_URL}/{created['id']}", json={"user_id": 456})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -272,7 +355,7 @@ class TestYourResourceService(TestCase):
 
     def test_update_shopcart_last_updated(self):
         """It should refresh last_updated when only the Items change"""
-        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 123}).get_json()
         payload = {
             "user_id": 123,
             "items": [
@@ -280,7 +363,7 @@ class TestYourResourceService(TestCase):
             ],
         }
 
-        response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
+        response = self.client.put(f"{BASE_URL}/{created['id']}", json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -292,10 +375,10 @@ class TestYourResourceService(TestCase):
 
     def test_update_shopcart_ignores_id(self):
         """It should not change the id of a Shopcart"""
-        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 123}).get_json()
 
         response = self.client.put(
-            f"/shopcarts/{created['id']}",
+            f"{BASE_URL}/{created['id']}",
             json={"id": created["id"] + 1000, "user_id": 456},
         )
 
@@ -305,7 +388,7 @@ class TestYourResourceService(TestCase):
 
     def test_update_shopcart_not_found(self):
         """It should not Update a Shopcart that does not exist"""
-        response = self.client.put("/shopcarts/0", json={"user_id": 456})
+        response = self.client.put(f"{BASE_URL}/0", json={"user_id": 456})
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         data = response.get_json()
@@ -315,9 +398,9 @@ class TestYourResourceService(TestCase):
 
     def test_update_shopcart_missing_user_id(self):
         """It should not Update a Shopcart without a user_id"""
-        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 123}).get_json()
 
-        response = self.client.put(f"/shopcarts/{created['id']}", json={"items": []})
+        response = self.client.put(f"{BASE_URL}/{created['id']}", json={"items": []})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.get_json()["error"], "Bad Request")
@@ -331,7 +414,7 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
             ],
         }
-        created = self.client.post("/shopcarts", json=payload).get_json()
+        created = self.client.post(BASE_URL, json=payload).get_json()
 
         payload = {
             "user_id": 456,
@@ -339,19 +422,19 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1002, "name": "Product B", "quantity": 0, "price": 5.00}
             ],
         }
-        response = self.client.put(f"/shopcarts/{created['id']}", json=payload)
+        response = self.client.put(f"{BASE_URL}/{created['id']}", json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        response = self.client.get(f"/shopcarts/{created['id']}")
+        response = self.client.get(f"{BASE_URL}/{created['id']}")
         self.assertEqual(response.get_json()["user_id"], 123)
         self.assertEqual(response.get_json()["items"], created["items"])
 
     def test_update_shopcart_unsupported_media_type(self):
         """It should not Update a Shopcart without a JSON content type"""
-        created = self.client.post("/shopcarts", json={"user_id": 123}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 123}).get_json()
 
         response = self.client.put(
-            f"/shopcarts/{created['id']}",
+            f"{BASE_URL}/{created['id']}",
             data='{"user_id": 456}',
             content_type="text/plain",
         )
@@ -363,7 +446,7 @@ class TestYourResourceService(TestCase):
         """It should Create a Shopcart"""
         payload = {"user_id": 123}
 
-        response = self.client.post("/shopcarts", json=payload)
+        response = self.client.post(BASE_URL, json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -374,7 +457,7 @@ class TestYourResourceService(TestCase):
 
         self.assertIn("Location", response.headers)
         self.assertTrue(
-            response.headers["Location"].endswith(f"/shopcarts/{data['id']}")
+            response.headers["Location"].endswith(f"{BASE_URL}/{data['id']}")
         )
 
         shopcart = Shopcart.find(data["id"])
@@ -395,7 +478,7 @@ class TestYourResourceService(TestCase):
             ],
         }
 
-        response = self.client.post("/shopcarts", json=payload)
+        response = self.client.post(BASE_URL, json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -416,7 +499,7 @@ class TestYourResourceService(TestCase):
         """It should not Create a Shopcart without a user_id"""
         payload = {"items": []}
 
-        response = self.client.post("/shopcarts", json=payload)
+        response = self.client.post(BASE_URL, json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(len(Shopcart.all()), 0)
@@ -437,7 +520,7 @@ class TestYourResourceService(TestCase):
                     ],
                 }
 
-                response = self.client.post("/shopcarts", json=payload)
+                response = self.client.post(BASE_URL, json=payload)
 
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(len(Shopcart.all()), 0)
@@ -457,7 +540,7 @@ class TestYourResourceService(TestCase):
             ],
         }
 
-        response = self.client.post("/shopcarts", json=payload)
+        response = self.client.post(BASE_URL, json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(len(Shopcart.all()), 0)
@@ -483,7 +566,7 @@ class TestYourResourceService(TestCase):
             ],
         }
 
-        response = self.client.post("/shopcarts", json=payload)
+        response = self.client.post(BASE_URL, json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(len(Shopcart.all()), 0)
@@ -496,7 +579,7 @@ class TestYourResourceService(TestCase):
             "items": [],
         }
 
-        response = self.client.post("/shopcarts", json=payload)
+        response = self.client.post(BASE_URL, json=payload)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
@@ -507,7 +590,7 @@ class TestYourResourceService(TestCase):
 
         self.assertIn("Location", response.headers)
         self.assertTrue(
-            response.headers["Location"].endswith(f"/shopcarts/{data['id']}")
+            response.headers["Location"].endswith(f"{BASE_URL}/{data['id']}")
         )
 
         saved_cart = Shopcart.find(data["id"])
@@ -517,7 +600,7 @@ class TestYourResourceService(TestCase):
     def test_create_shopcart_invalid_json(self):
         """It should reject malformed JSON"""
         response = self.client.post(
-            "/shopcarts",
+            BASE_URL,
             data='{"user_id":',
             content_type="application/json",
         )
@@ -529,7 +612,7 @@ class TestYourResourceService(TestCase):
     def test_create_shopcart_unsupported_media_type(self):
         """It should reject a request without JSON content type"""
         response = self.client.post(
-            "/shopcarts",
+            BASE_URL,
             data='{"user_id": 123}',
             content_type="text/plain",
         )
@@ -547,7 +630,7 @@ class TestYourResourceService(TestCase):
     def test_create_shopcart_method_not_allowed(self):
         """It should reject an unsupported method on the Shopcarts collection"""
         response = self.client.put(
-            "/shopcarts",
+            BASE_URL,
             json={"user_id": 123},
         )
 
@@ -567,7 +650,7 @@ class TestYourResourceService(TestCase):
 
     def test_create_shopcart_is_open(self):
         """It should Create a Shopcart with status OPEN"""
-        response = self.client.post("/shopcarts", json={"user_id": 123})
+        response = self.client.post(BASE_URL, json={"user_id": 123})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.get_json()["status"], "OPEN")
 
@@ -576,7 +659,7 @@ class TestYourResourceService(TestCase):
         for supplied in ("CHECKED_OUT", "BANANA", None):
             with self.subTest(status=supplied):
                 response = self.client.post(
-                    "/shopcarts", json={"user_id": 123, "status": supplied}
+                    BASE_URL, json={"user_id": 123, "status": supplied}
                 )
 
                 self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -599,14 +682,14 @@ class TestYourResourceService(TestCase):
                     shopcart = Shopcart(user_id=123, status=current)
                     shopcart.create()
 
-                    response = self.client.put(f"/shopcarts/{shopcart.id}", json=payload)
+                    response = self.client.put(f"{BASE_URL}/{shopcart.id}", json=payload)
 
                     self.assertEqual(response.status_code, status.HTTP_200_OK)
                     data = response.get_json()
                     self.assertEqual(data["user_id"], 456)
                     self.assertEqual(data["status"], current)
 
-                    response = self.client.get(f"/shopcarts/{data['id']}")
+                    response = self.client.get(f"{BASE_URL}/{data['id']}")
                     self.assertEqual(response.get_json()["status"], current)
 
     ######################################################################
@@ -619,13 +702,13 @@ class TestYourResourceService(TestCase):
         shopcart.create()
         shopcart_id = shopcart.id
 
-        response = self.client.delete(f"/shopcarts/{shopcart_id}")
+        response = self.client.delete(f"{BASE_URL}/{shopcart_id}")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(len(response.data), 0)
         self.assertIsNone(Shopcart.find(shopcart_id))
 
-        response = self.client.get(f"/shopcarts/{shopcart_id}")
+        response = self.client.get(f"{BASE_URL}/{shopcart_id}")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_delete_shopcart_with_items(self):
@@ -642,10 +725,10 @@ class TestYourResourceService(TestCase):
                 {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
             ],
         }
-        created = self.client.post("/shopcarts", json=payload).get_json()
+        created = self.client.post(BASE_URL, json=payload).get_json()
         self.assertEqual(len(Item.all()), 2)
 
-        response = self.client.delete(f"/shopcarts/{created['id']}")
+        response = self.client.delete(f"{BASE_URL}/{created['id']}")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertIsNone(Shopcart.find(created["id"]))
@@ -654,7 +737,7 @@ class TestYourResourceService(TestCase):
     def test_delete_shopcart_leaves_others(self):
         """It should only Delete the requested Shopcart"""
         keep = self.client.post(
-            "/shopcarts",
+            BASE_URL,
             json={
                 "user_id": 1,
                 "items": [
@@ -662,9 +745,9 @@ class TestYourResourceService(TestCase):
                 ],
             },
         ).get_json()
-        remove = self.client.post("/shopcarts", json={"user_id": 2}).get_json()
+        remove = self.client.post(BASE_URL, json={"user_id": 2}).get_json()
 
-        response = self.client.delete(f"/shopcarts/{remove['id']}")
+        response = self.client.delete(f"{BASE_URL}/{remove['id']}")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual([cart.id for cart in Shopcart.all()], [keep["id"]])
@@ -672,17 +755,17 @@ class TestYourResourceService(TestCase):
 
     def test_delete_shopcart_not_found(self):
         """It should return 204 when Deleting a Shopcart that does not exist"""
-        response = self.client.delete("/shopcarts/0")
+        response = self.client.delete(f"{BASE_URL}/0")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(response.data, b"")
 
     def test_delete_shopcart_twice(self):
         """It should return 204 every time the same Shopcart is Deleted"""
-        created = self.client.post("/shopcarts", json={"user_id": 1}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 1}).get_json()
 
         for _ in range(2):
-            response = self.client.delete(f"/shopcarts/{created['id']}")
+            response = self.client.delete(f"{BASE_URL}/{created['id']}")
             self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertIsNone(Shopcart.find(created["id"]))
 
@@ -693,9 +776,9 @@ class TestYourResourceService(TestCase):
     def test_list_shopcarts(self):
         """It should List all Shopcarts"""
         for user_id in (1, 2, 3):
-            self.client.post("/shopcarts", json={"user_id": user_id})
+            self.client.post(BASE_URL, json={"user_id": user_id})
 
-        response = self.client.get("/shopcarts")
+        response = self.client.get(BASE_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -706,10 +789,10 @@ class TestYourResourceService(TestCase):
         """It should List Shopcarts with their Items"""
         item = {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
         created = self.client.post(
-            "/shopcarts", json={"user_id": 1, "items": [item]}
+            BASE_URL, json={"user_id": 1, "items": [item]}
         ).get_json()
 
-        response = self.client.get("/shopcarts")
+        response = self.client.get(BASE_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -720,7 +803,7 @@ class TestYourResourceService(TestCase):
 
     def test_list_shopcarts_empty(self):
         """It should return an empty list when there are no Shopcarts"""
-        response = self.client.get("/shopcarts")
+        response = self.client.get(BASE_URL)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), [])
@@ -732,9 +815,9 @@ class TestYourResourceService(TestCase):
     def test_query_shopcarts_by_user_id(self):
         """It should List only the Shopcarts of the given user_id"""
         for user_id in (1, 1, 2):
-            self.client.post("/shopcarts", json={"user_id": user_id})
+            self.client.post(BASE_URL, json={"user_id": user_id})
 
-        response = self.client.get("/shopcarts", query_string={"user_id": 1})
+        response = self.client.get(BASE_URL, query_string={"user_id": 1})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -743,19 +826,19 @@ class TestYourResourceService(TestCase):
 
     def test_query_shopcarts_by_user_id_no_match(self):
         """It should return an empty list when the user has no Shopcarts"""
-        self.client.post("/shopcarts", json={"user_id": 1})
+        self.client.post(BASE_URL, json={"user_id": 1})
 
-        response = self.client.get("/shopcarts", query_string={"user_id": 3})
+        response = self.client.get(BASE_URL, query_string={"user_id": 3})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), [])
 
     def test_query_shopcarts_by_bad_user_id(self):
         """It should not List Shopcarts when user_id is not an integer"""
-        self.client.post("/shopcarts", json={"user_id": 1})
+        self.client.post(BASE_URL, json={"user_id": 1})
         for bad in ("abc", "1.5", ""):
             with self.subTest(user_id=bad):
-                response = self.client.get("/shopcarts", query_string={"user_id": bad})
+                response = self.client.get(BASE_URL, query_string={"user_id": bad})
 
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(response.get_json()["error"], "Bad Request")
@@ -768,7 +851,7 @@ class TestYourResourceService(TestCase):
         """It should Add an Item to a Shopcart"""
         shopcart = self._create_shopcart()
         payload = make_item()
-        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=payload)
+        resp = self.client.post(f"{LEGACY_URL}/{shopcart.id}/items", json=payload)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
 
         data = resp.get_json()
@@ -781,7 +864,7 @@ class TestYourResourceService(TestCase):
 
         location = resp.headers.get("Location")
         self.assertTrue(
-            location.endswith(f"/shopcarts/{shopcart.id}/items/{data['id']}")
+            location.endswith(f"{LEGACY_URL}/{shopcart.id}/items/{data['id']}")
         )
 
         found = Shopcart.find(shopcart.id)
@@ -790,7 +873,7 @@ class TestYourResourceService(TestCase):
 
     def test_add_item_shopcart_not_found(self):
         """It should not Add an Item to a Shopcart that does not exist"""
-        resp = self.client.post(f"{BASE_URL}/0/items", json=make_item())
+        resp = self.client.post(f"{LEGACY_URL}/0/items", json=make_item())
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(db.session.query(Item).count(), 0)
 
@@ -799,7 +882,7 @@ class TestYourResourceService(TestCase):
         shopcart = self._create_shopcart()
         payload = make_item()
         del payload["product_id"]
-        resp = self.client.post(f"{BASE_URL}/{shopcart.id}/items", json=payload)
+        resp = self.client.post(f"{LEGACY_URL}/{shopcart.id}/items", json=payload)
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(db.session.query(Item).count(), 0)
 
@@ -809,7 +892,7 @@ class TestYourResourceService(TestCase):
         for quantity in (0, -5):
             with self.subTest(quantity=quantity):
                 resp = self.client.post(
-                    f"{BASE_URL}/{shopcart.id}/items", json=make_item(quantity=quantity)
+                    f"{LEGACY_URL}/{shopcart.id}/items", json=make_item(quantity=quantity)
                 )
                 self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(db.session.query(Item).count(), 0)
@@ -818,7 +901,7 @@ class TestYourResourceService(TestCase):
         """It should not Add an Item with a negative price"""
         shopcart = self._create_shopcart()
         resp = self.client.post(
-            f"{BASE_URL}/{shopcart.id}/items", json=make_item(price=-1)
+            f"{LEGACY_URL}/{shopcart.id}/items", json=make_item(price=-1)
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(db.session.query(Item).count(), 0)
@@ -828,7 +911,7 @@ class TestYourResourceService(TestCase):
         first = self._create_shopcart(user_id=1)
         second = self._create_shopcart(user_id=2)
         payload = make_item(shopcart_id=second.id)
-        resp = self.client.post(f"{BASE_URL}/{first.id}/items", json=payload)
+        resp = self.client.post(f"{LEGACY_URL}/{first.id}/items", json=payload)
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertEqual(resp.get_json()["shopcart_id"], first.id)
         self.assertEqual(len(Shopcart.find(second.id).items), 0)
@@ -837,7 +920,7 @@ class TestYourResourceService(TestCase):
         """It should not Add an Item with the wrong Content-Type"""
         shopcart = self._create_shopcart()
         resp = self.client.post(
-            f"{BASE_URL}/{shopcart.id}/items", data="name=x", content_type="text/html"
+            f"{LEGACY_URL}/{shopcart.id}/items", data="name=x", content_type="text/html"
         )
         self.assertEqual(resp.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
@@ -853,7 +936,7 @@ class TestYourResourceService(TestCase):
         item.create()
         item_id = item.id
 
-        response = self.client.delete(f"{BASE_URL}/{shopcart_id}/items/{item_id}")
+        response = self.client.delete(f"{LEGACY_URL}/{shopcart_id}/items/{item_id}")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(response.data, b"")
@@ -862,7 +945,7 @@ class TestYourResourceService(TestCase):
 
     def test_delete_item_shopcart_not_found(self):
         """It should return 204 when the shopcart does not exist."""
-        response = self.client.delete(f"{BASE_URL}/0/items/1")
+        response = self.client.delete(f"{LEGACY_URL}/0/items/1")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
@@ -871,7 +954,7 @@ class TestYourResourceService(TestCase):
         shopcart = self._create_shopcart()
         shopcart_id = shopcart.id
 
-        response = self.client.delete(f"{BASE_URL}/{shopcart_id}/items/0")
+        response = self.client.delete(f"{LEGACY_URL}/{shopcart_id}/items/0")
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertIsNotNone(Shopcart.find(shopcart_id))
@@ -881,7 +964,7 @@ class TestYourResourceService(TestCase):
         created = self.client.post(
             BASE_URL, json={"user_id": 1, "items": [make_item()]}
         ).get_json()
-        url = f"{BASE_URL}/{created['id']}/items/{created['items'][0]['id']}"
+        url = f"{LEGACY_URL}/{created['id']}/items/{created['items'][0]['id']}"
 
         for _ in range(2):
             response = self.client.delete(url)
@@ -901,7 +984,7 @@ class TestYourResourceService(TestCase):
         item.create()
         item_id = item.id
 
-        response = self.client.delete(f"{BASE_URL}/{first_id}/items/{item_id}")
+        response = self.client.delete(f"{LEGACY_URL}/{first_id}/items/{item_id}")
 
         # 204 because DELETE is idempotent, but the other cart's item must survive
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -922,10 +1005,10 @@ class TestYourResourceService(TestCase):
             {"product_id": 1002, "name": "Product B", "quantity": 1, "price": 5.00},
         ]
         created = self.client.post(
-            "/shopcarts", json={"user_id": 1, "items": items}
+            BASE_URL, json={"user_id": 1, "items": items}
         ).get_json()
 
-        response = self.client.get(f"/shopcarts/{created['id']}/items")
+        response = self.client.get(f"{LEGACY_URL}/{created['id']}/items")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -938,9 +1021,9 @@ class TestYourResourceService(TestCase):
 
     def test_list_items_empty(self):
         """It should return an empty list for a Shopcart with no Items"""
-        created = self.client.post("/shopcarts", json={"user_id": 1}).get_json()
+        created = self.client.post(BASE_URL, json={"user_id": 1}).get_json()
 
-        response = self.client.get(f"/shopcarts/{created['id']}/items")
+        response = self.client.get(f"{LEGACY_URL}/{created['id']}/items")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), [])
@@ -949,11 +1032,11 @@ class TestYourResourceService(TestCase):
         """It should only List the Items of the Shopcart in the URL"""
         item = {"product_id": 1001, "name": "Product A", "quantity": 2, "price": 24.99}
         first = self.client.post(
-            "/shopcarts", json={"user_id": 1, "items": [item]}
+            BASE_URL, json={"user_id": 1, "items": [item]}
         ).get_json()
-        self.client.post("/shopcarts", json={"user_id": 2, "items": [item, item]})
+        self.client.post(BASE_URL, json={"user_id": 2, "items": [item, item]})
 
-        response = self.client.get(f"/shopcarts/{first['id']}/items")
+        response = self.client.get(f"{LEGACY_URL}/{first['id']}/items")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -962,7 +1045,7 @@ class TestYourResourceService(TestCase):
 
     def test_list_items_shopcart_not_found(self):
         """It should not List Items of a Shopcart that does not exist"""
-        response = self.client.get("/shopcarts/0/items")
+        response = self.client.get(f"{LEGACY_URL}/0/items")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         data = response.get_json()
@@ -985,7 +1068,7 @@ class TestYourResourceService(TestCase):
         expected_item = created["items"][0]
         item_id = expected_item["id"]
 
-        response = self.client.get(f"{BASE_URL}/{shopcart_id}/items/{item_id}")
+        response = self.client.get(f"{LEGACY_URL}/{shopcart_id}/items/{item_id}")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -998,7 +1081,7 @@ class TestYourResourceService(TestCase):
         """It should return 404 when the Item does not exist"""
         shopcart = self._create_shopcart()
 
-        response = self.client.get(f"{BASE_URL}/{shopcart.id}/items/0")
+        response = self.client.get(f"{LEGACY_URL}/{shopcart.id}/items/0")
 
         self.assertEqual(
             response.status_code,
@@ -1007,7 +1090,7 @@ class TestYourResourceService(TestCase):
 
     def test_read_item_shopcart_not_found(self):
         """It should return 404 when the Shopcart does not exist"""
-        response = self.client.get(f"{BASE_URL}/0/items/1")
+        response = self.client.get(f"{LEGACY_URL}/0/items/1")
 
         self.assertEqual(
             response.status_code,
@@ -1024,7 +1107,7 @@ class TestYourResourceService(TestCase):
 
         item_id = second["items"][0]["id"]
 
-        response = self.client.get(f"{BASE_URL}/{first.id}/items/{item_id}")
+        response = self.client.get(f"{LEGACY_URL}/{first.id}/items/{item_id}")
 
         self.assertEqual(
             response.status_code,
@@ -1041,7 +1124,7 @@ class TestYourResourceService(TestCase):
             BASE_URL, json={"user_id": 7, "items": [make_item()]}
         ).get_json()
 
-        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
+        response = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -1055,7 +1138,7 @@ class TestYourResourceService(TestCase):
 
     def test_checkout_shopcart_not_found(self):
         """It should not Checkout a Shopcart that does not exist"""
-        response = self.client.put(f"{BASE_URL}/0/checkout")
+        response = self.client.put(f"{LEGACY_URL}/0/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.get_json()["error"], "Not Found")
@@ -1064,7 +1147,7 @@ class TestYourResourceService(TestCase):
         """It should not Checkout a Shopcart with no Items"""
         created = self.client.post(BASE_URL, json={"user_id": 7}).get_json()
 
-        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
+        response = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.get_json()["error"], "Bad Request")
@@ -1076,9 +1159,9 @@ class TestYourResourceService(TestCase):
         created = self.client.post(
             BASE_URL, json={"user_id": 7, "items": [make_item()]}
         ).get_json()
-        first = self.client.put(f"{BASE_URL}/{created['id']}/checkout").get_json()
+        first = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout").get_json()
 
-        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
+        response = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), first)
