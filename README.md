@@ -288,10 +288,14 @@ This command runs Flake8 and Pylint against the application and test code.
 
 The `Dockerfile` builds a Python 3.12 image with the runtime dependencies only. It runs gunicorn as a non-root user on `$PORT`, which defaults to 8080:
 
+To try the image from the Dev Container terminal against the development database, stop `make run` first, since both use port 8080:
+
 ```bash
 make build
-docker run --rm -p 8080:8080 -e DATABASE_URI=<postgres uri> cluster-registry:5000/shopcarts:1.0
+docker run --rm --network host -e DATABASE_URI="$DATABASE_URI" cluster-registry:5000/shopcarts:1.0
 ```
+
+The Dev Container already sets `DATABASE_URI` to its Postgres database, and `--network host` lets the container reach it as `postgres`. To use another database, set it in quotes, for example `-e DATABASE_URI="postgresql+psycopg://postgres:pgs3cr3t@postgres:5432/postgres"`.
 
 `k8s/` deploys the service and its Postgres database to the K3D cluster, reachable at http://localhost:8080 through an Ingress. See [k8s/README.md](k8s/README.md) for the full steps, including the Secrets to create once:
 
