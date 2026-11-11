@@ -24,7 +24,7 @@ and Delete Shopcart
 from flask import jsonify, request, url_for, abort
 from flask import current_app as app  # Import Flask application
 from flask_restx import Api, Resource, fields
-from service.models import Shopcart, Item, SHOPCART_STATUSES
+from service.models import Shopcart, Item, SHOPCART_STATUSES, is_database_integer
 from service.common import status  # HTTP Status Codes
 
 
@@ -240,6 +240,13 @@ class ShopcartCollection(Resource):
                 user_id = int(user_id)
             except ValueError:
                 abort(status.HTTP_400_BAD_REQUEST, "user_id must be an integer")
+
+            if not is_database_integer(user_id):
+                abort(
+                    status.HTTP_400_BAD_REQUEST,
+                    "user_id exceeds database integer range",
+                )
+
             shopcarts = Shopcart.find_by_user_id(user_id)
 
         results = [shopcart.serialize() for shopcart in shopcarts]
