@@ -105,7 +105,7 @@ validated without deploying the Shopcarts API; API wiring belongs to Story #36.
 
 ## REST API Endpoints
 
-The service provides the following endpoints. The Shopcart endpoints are under `/api` and documented at `/apidocs/`. The Item and checkout endpoints move under `/api` in #59 and #60.
+The service provides the following endpoints. The Shopcart and Item endpoints are under `/api` and documented at `/apidocs/`. The checkout endpoint moves under `/api` in #60.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -117,11 +117,11 @@ The service provides the following endpoints. The Shopcart endpoints are under `
 | GET | `/api/shopcarts/{shopcart_id}` | Retrieve a shopping cart |
 | PUT | `/api/shopcarts/{shopcart_id}` | Update a shopping cart |
 | DELETE | `/api/shopcarts/{shopcart_id}` | Delete a shopping cart |
-| POST | `/shopcarts/{shopcart_id}/items` | Add an item to a shopping cart |
-| GET | `/shopcarts/{shopcart_id}/items` | List items in a shopping cart |
-| GET | `/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
-| PUT | `/shopcarts/{shopcart_id}/items/{item_id}` | Update an existing item in a shopping cart |
-| DELETE | `/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
+| POST | `/api/shopcarts/{shopcart_id}/items` | Add an item to a shopping cart |
+| GET | `/api/shopcarts/{shopcart_id}/items` | List items in a shopping cart |
+| GET | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
+| PUT | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Update an existing item in a shopping cart |
+| DELETE | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
 | PUT | `/shopcarts/{shopcart_id}/checkout` | Check out a shopping cart (action) |
 
 ### Shopcart Data Model
@@ -199,7 +199,7 @@ Replace `1` with an existing shopcart ID.
 ### Add an Item to a Shopping Cart
 
 ```bash
-curl -X POST http://localhost:8080/shopcarts/1/items \
+curl -X POST http://localhost:8080/api/shopcarts/1/items \
   -H "Content-Type: application/json" \
   -d '{
     "product_id": 1001,
@@ -214,13 +214,13 @@ A successful request returns `201 Created` with the created item.
 ### List Items in a Shopping Cart
 
 ```bash
-curl http://localhost:8080/shopcarts/1/items
+curl http://localhost:8080/api/shopcarts/1/items
 ```
 
 ### Retrieve a Specific Item
 
 ```bash
-curl http://localhost:8080/shopcarts/1/items/1
+curl http://localhost:8080/api/shopcarts/1/items/1
 ```
 
 Replace both IDs with an existing shopcart and an item belonging to that shopcart. A successful request returns `200 OK` with the item's JSON representation.
@@ -228,7 +228,7 @@ Replace both IDs with an existing shopcart and an item belonging to that shopcar
 ### Update an Item
 
 ```bash
-curl -X PUT http://localhost:8080/shopcarts/1/items/1 \
+curl -X PUT http://localhost:8080/api/shopcarts/1/items/1 \
   -H "Content-Type: application/json" \
   -d '{
     "product_id": 1001,
@@ -243,7 +243,7 @@ Replace both IDs with an existing shopcart and an item belonging to it. Send all
 ### Delete an Item
 
 ```bash
-curl -X DELETE http://localhost:8080/shopcarts/1/items/1
+curl -X DELETE http://localhost:8080/api/shopcarts/1/items/1
 ```
 
 A successful deletion returns `204 No Content`.

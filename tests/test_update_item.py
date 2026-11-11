@@ -42,7 +42,7 @@ class TestUpdateItemService(TestCase):
         )
         self.item.create()
         self.original = self.item.serialize()
-        self.url = f"/shopcarts/{self.shopcart.id}/items/{self.item.id}"
+        self.url = f"/api/shopcarts/{self.shopcart.id}/items/{self.item.id}"
 
     def tearDown(self):
         """Remove the session after each test."""
@@ -127,7 +127,7 @@ class TestUpdateItemService(TestCase):
     def test_update_item_shopcart_not_found(self):
         """It should return 404 when updating an Item in a missing Shopcart"""
         response = self.client.put(
-            f"/shopcarts/0/items/{self.item.id}", json=self.original
+            f"/api/shopcarts/0/items/{self.item.id}", json=self.original
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -136,7 +136,7 @@ class TestUpdateItemService(TestCase):
     def test_update_item_not_found(self):
         """It should return 404 rather than create a missing Item"""
         response = self.client.put(
-            f"/shopcarts/{self.shopcart.id}/items/0", json=self.original
+            f"/api/shopcarts/{self.shopcart.id}/items/0", json=self.original
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -149,7 +149,7 @@ class TestUpdateItemService(TestCase):
         other.create()
 
         response = self.client.put(
-            f"/shopcarts/{other.id}/items/{self.item.id}",
+            f"/api/shopcarts/{other.id}/items/{self.item.id}",
             json=dict(self.original, quantity=5),
         )
 

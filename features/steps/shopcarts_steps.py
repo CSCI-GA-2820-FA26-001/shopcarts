@@ -33,9 +33,8 @@ HTTP_204_NO_CONTENT = 204
 
 WAIT_TIMEOUT = 60
 
-# The Item routes move to /api/shopcarts in #59
 SHOPCARTS_URL = "/api/shopcarts"
-ITEMS_URL = "/shopcarts/{shopcart_id}/items"
+ITEMS_URL = "/api/shopcarts/{shopcart_id}/items"
 
 
 @given("the following shopcarts")
