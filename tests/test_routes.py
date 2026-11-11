@@ -92,13 +92,28 @@ class TestYourResourceService(TestCase):
     ######################################################################
 
     def test_index(self):
-        """It should return information about the service at the root URL"""
+        """It should serve the admin page at the root URL"""
         resp = self.client.get("/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        data = resp.get_json()
-        self.assertEqual(data["name"], "Shopcart REST API Service")
-        self.assertEqual(data["version"], "1.0")
-        self.assertTrue(data["paths"].endswith(BASE_URL))
+        self.assertEqual(resp.mimetype, "text/html")
+        self.assertIn(b"<title>Shopcarts Admin</title>", resp.data)
+        resp.close()
+
+    def test_admin_page_assets(self):
+        """It should serve the scripts and styles of the admin page without the internet"""
+        page = self.client.get("/")
+        html = page.get_data(as_text=True)
+        page.close()
+        for path in (
+            "/static/css/bootstrap.min.css",
+            "/static/js/jquery-3.7.1.min.js",
+            "/static/js/rest_api.js",
+        ):
+            with self.subTest(path=path):
+                self.assertIn(f'"{path}"', html)
+                resp = self.client.get(path)
+                self.assertEqual(resp.status_code, status.HTTP_200_OK)
+                resp.close()
 
     ######################################################################
     #  H E A L T H   C H E C K   (#26)
