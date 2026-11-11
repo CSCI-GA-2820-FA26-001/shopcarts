@@ -36,3 +36,27 @@ Scenario: Search shopcarts by customer
     Then I should see the message "Success"
     And I should see 2 shopcarts in the results
     And I should not see "202" in the results
+
+Scenario: Retrieve a shopcart
+    Given the following shopcarts
+        | user_id |
+        | 101     |
+        | 202     |
+    When I visit the "Home Page"
+    And I set the "User ID" to "202"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I copy the "Shopcart ID" field
+    And I press the "Clear" button
+    And I paste the "Shopcart ID" field
+    And I press the "Retrieve" button
+    Then I should see the message "Success"
+    And the "User ID" field should contain "202"
+    And the "Status" field should contain "OPEN"
+
+Scenario: Retrieve a shopcart that does not exist
+    When I visit the "Home Page"
+    And I set the "Shopcart ID" to "0"
+    And I press the "Retrieve" button
+    Then I should see the message "could not be found"
+    And the "User ID" field should be empty
