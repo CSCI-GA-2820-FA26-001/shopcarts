@@ -101,7 +101,7 @@ class PersistentBase:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error creating record: %s", self)
+            logger.error("Error creating record: %s: %s", self, e)
             raise DataValidationError("Database operation failed") from e
 
     def update(self):
@@ -117,7 +117,7 @@ class PersistentBase:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error updating record: %s", self)
+            logger.error("Error updating record: %s: %s", self, e)
             raise DataValidationError("Database operation failed") from e
 
     def delete(self):
@@ -128,7 +128,7 @@ class PersistentBase:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error deleting record: %s", self)
+            logger.error("Error deleting record: %s: %s", self, e)
             raise DataValidationError("Database operation failed") from e
 
     @classmethod
