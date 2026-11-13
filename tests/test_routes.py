@@ -32,8 +32,6 @@ DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql+psycopg://postgres:postgres@localhost:5432/testdb"
 )
 BASE_URL = "/api/shopcarts"
-# The checkout route moves to /api in #60
-LEGACY_URL = "/shopcarts"
 
 
 def make_item(**overrides):
@@ -1218,7 +1216,7 @@ class TestYourResourceService(TestCase):
             BASE_URL, json={"user_id": 7, "items": [make_item()]}
         ).get_json()
 
-        response = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout")
+        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.get_json()
@@ -1232,7 +1230,7 @@ class TestYourResourceService(TestCase):
 
     def test_checkout_shopcart_not_found(self):
         """It should not Checkout a Shopcart that does not exist"""
-        response = self.client.put(f"{LEGACY_URL}/0/checkout")
+        response = self.client.put(f"{BASE_URL}/0/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.get_json()["error"], "Not Found")
@@ -1241,7 +1239,7 @@ class TestYourResourceService(TestCase):
         """It should not Checkout a Shopcart with no Items"""
         created = self.client.post(BASE_URL, json={"user_id": 7}).get_json()
 
-        response = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout")
+        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.get_json()["error"], "Bad Request")
@@ -1253,9 +1251,83 @@ class TestYourResourceService(TestCase):
         created = self.client.post(
             BASE_URL, json={"user_id": 7, "items": [make_item()]}
         ).get_json()
-        first = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout").get_json()
+        first = self.client.put(f"{BASE_URL}/{created['id']}/checkout").get_json()
 
-        response = self.client.put(f"{LEGACY_URL}/{created['id']}/checkout")
+        response = self.client.put(f"{BASE_URL}/{created['id']}/checkout")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), first)
+
+    ######################################################################
+    #  S W A G G E R   Q U E R Y   A N D   C H E C K O U T   (#60)
+    ######################################################################
+
+    def test_swagger_query_and_checkout_documented(self):
+        """It should document customer filtering and checkout in Swagger"""
+        response = self.client.get("/api/swagger.json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        spec = response.get_json()
+
+        list_operation = spec["paths"]["/shopcarts"]["get"]
+        query_parameters = [
+            param for param in list_operation.get("parameters", [])
+            if param.get("name") == "user_id"
+        ]
+        self.assertEqual(len(query_parameters), 1)
+        self.assertEqual(query_parameters[0]["in"], "query")
+        self.assertEqual(query_parameters[0]["type"], "integer")
+        self.assertFalse(query_parameters[0].get("required", False))
+
+        checkout_path = "/shopcarts/{shopcart_id}/checkout"
+        self.assertIn(checkout_path, spec["paths"])
+
+        checkout_operation = spec["paths"][checkout_path]["put"]
+        self.assertEqual(
+            checkout_operation["responses"]["200"]["schema"]["$ref"],
+            "#/definitions/Shopcart",
+        )
+        self.assertTrue(
+            {"200", "400", "404"} <= set(checkout_operation["responses"])
+        )
+
+        parameters = checkout_operation.get("parameters", [])
+        self.assertFalse(
+            any(param.get("in") == "body" for param in parameters)
+        )
+
+    def test_checkout_uses_restx_endpoint_only(self):
+        """It should query customers and check out through /api"""
+        first = self.client.post(
+            BASE_URL,
+            json={"user_id": 101, "items": [make_item()]},
+        ).get_json()
+        self.client.post(BASE_URL, json={"user_id": 202})
+
+        response = self.client.get(
+            BASE_URL, query_string={"user_id": 101}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [shopcart["id"] for shopcart in response.get_json()],
+            [first["id"]],
+        )
+
+        checkout_url = f"{BASE_URL}/{first['id']}/checkout"
+        response = self.client.put(checkout_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        data = response.get_json()
+        self.assertEqual(data["status"], "CHECKED_OUT")
+        self.assertEqual(data["items"], first["items"])
+
+        response = self.client.put(checkout_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.get_json(), data)
+
+        response = self.client.put(f"{BASE_URL}/0/checkout")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+        response = self.client.put(
+            f"/shopcarts/{first['id']}/checkout"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

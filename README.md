@@ -105,7 +105,7 @@ validated without deploying the Shopcarts API; API wiring belongs to Story #36.
 
 ## REST API Endpoints
 
-The service provides the following endpoints. The Shopcart and Item endpoints are under `/api` and documented at `/apidocs/`. The checkout endpoint moves under `/api` in #60.
+The service provides the following endpoints. The Shopcart and Item endpoints are under `/api` and documented at `/apidocs/`. The checkout endpoint is also implemented using Flask-RESTX.
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -122,7 +122,7 @@ The service provides the following endpoints. The Shopcart and Item endpoints ar
 | GET | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
 | PUT | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Update an existing item in a shopping cart |
 | DELETE | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
-| PUT | `/shopcarts/{shopcart_id}/checkout` | Check out a shopping cart (action) |
+| PUT | `/api/shopcarts/{shopcart_id}/checkout` | Check out a shopping cart (action) |
 
 ### Shopcart Data Model
 
@@ -251,7 +251,7 @@ A successful deletion returns `204 No Content`.
 ### Check Out a Shopping Cart
 
 ```bash
-curl -X PUT http://localhost:8080/shopcarts/1/checkout
+curl -X PUT http://localhost:8080/api/shopcarts/1/checkout
 ```
 
 No request body is needed. A successful checkout returns `200 OK` with the shopcart and `"status": "CHECKED_OUT"`; its items are unchanged. Checking out a cart that is already checked out returns `200 OK` with the same shopcart. An empty shopcart returns `400 Bad Request`, and a missing shopcart returns `404 Not Found`.
