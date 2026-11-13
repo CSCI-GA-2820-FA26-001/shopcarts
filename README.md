@@ -157,6 +157,7 @@ An item contains:
 - `404 Not Found` is returned when a requested shopcart or item does not exist, or when an item does not belong to the specified shopcart. DELETE is the exception: it is idempotent, so it returns `204 No Content` even when the resource doesn't exist.
 - Checking out an empty shopcart returns `400 Bad Request`.
 - `405 Method Not Allowed` is returned for unsupported HTTP methods; `415 Unsupported Media Type` is returned for unsupported request media types.
+- Unknown fields in Shopcart and Item JSON request bodies are rejected with 400 Bad Request. Server-managed fields such as id remain handled according to their existing rules.
 
 ## API Usage Examples
 

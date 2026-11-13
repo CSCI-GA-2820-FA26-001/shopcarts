@@ -23,6 +23,8 @@ import os
 import logging
 from datetime import datetime
 from unittest import TestCase
+from unittest.mock import patch
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import Conflict
 from wsgi import app
 from service.common import status, error_handlers
@@ -1257,6 +1259,269 @@ class TestYourResourceService(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.get_json(), first)
+
+    ######################################################################
+    #  J S O N   E R R O R   H A N D L I N G   (#55)
+    ######################################################################
+
+    def test_reject_unknown_shopcart_fields(self):
+        """It should return structured errors for unknown Shopcart fields"""
+        response = self.client.post(
+            BASE_URL,
+            json={"user_id": 101, "unexpected_field": "value"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertTrue({"status", "error", "message"} <= set(data))
+        self.assertEqual(data["status"], 400)
+
+        created = self.client.post(
+            BASE_URL, json={"user_id": 101}
+        ).get_json()
+
+        response = self.client.put(
+            f"{BASE_URL}/{created['id']}",
+            json={"user_id": 202, "unexpected_field": "value"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            Shopcart.find(created["id"]).user_id, 101
+        )
+
+    def test_reject_unknown_item_fields(self):
+        """It should return structured errors for unknown Item fields"""
+        created = self.client.post(
+            BASE_URL,
+            json={"user_id": 101},
+        ).get_json()
+
+        response = self.client.post(
+            f"{BASE_URL}/{created['id']}/items",
+            json=make_item(unexpected_field="value"),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertTrue({"status", "error", "message"} <= set(data))
+        self.assertEqual(data["status"], 400)
+        self.assertEqual(len(Item.all()), 0)
+
+    def test_invalid_requests_have_consistent_json_errors(self):
+        """It should return structured 4xx errors for malformed input"""
+        cases = [
+            (
+                "missing user_id",
+                lambda: self.client.post(BASE_URL, json={}),
+            ),
+            (
+                "boolean user_id",
+                lambda: self.client.post(
+                    BASE_URL, json={"user_id": True}
+                ),
+            ),
+            (
+                "malformed JSON",
+                lambda: self.client.post(
+                    BASE_URL,
+                    data='{"user_id":',
+                    content_type="application/json",
+                ),
+            ),
+            (
+                "wrong content type",
+                lambda: self.client.post(
+                    BASE_URL,
+                    data='{"user_id": 101}',
+                    content_type="text/plain",
+                ),
+            ),
+            (
+                "invalid query",
+                lambda: self.client.get(
+                    BASE_URL, query_string={"user_id": "abc"}
+                ),
+            ),
+            (
+                "invalid quantity",
+                lambda: self.client.post(
+                    BASE_URL,
+                    json={
+                        "user_id": 101,
+                        "items": [make_item(quantity=0)],
+                    },
+                ),
+            ),
+            (
+                "infinite price",
+                lambda: self.client.post(
+                    BASE_URL,
+                    json={
+                        "user_id": 101,
+                        "items": [make_item(price=float("inf"))],
+                    },
+                ),
+            ),
+        ]
+
+        for label, send_request in cases:
+            with self.subTest(case=label):
+                response = send_request()
+                self.assertGreaterEqual(response.status_code, 400)
+                self.assertLess(response.status_code, 500)
+
+                data = response.get_json()
+                self.assertIsInstance(data, dict)
+                self.assertTrue(
+                    {"status", "error", "message"} <= set(data)
+                )
+                self.assertEqual(
+                    data["status"], response.status_code
+                )
+
+    def test_oversized_numeric_values(self):
+        """It should reject numbers outside database limits without SQL details"""
+        cases = [
+            (
+                "user ID overflow",
+                {"user_id": 2**63},
+            ),
+            (
+                "product ID overflow",
+                {
+                    "user_id": 101,
+                    "items": [make_item(product_id=2**63)],
+                },
+            ),
+            (
+                "quantity overflow",
+                {
+                    "user_id": 101,
+                    "items": [make_item(quantity=2**63)],
+                },
+            ),
+            (
+                "price overflow",
+                {
+                    "user_id": 101,
+                    "items": [make_item(price=10**10)],
+                },
+            ),
+        ]
+
+        for label, payload in cases:
+            with self.subTest(case=label):
+                try:
+                    response = self.client.post(BASE_URL, json=payload)
+                    self.assertEqual(response.status_code, 400)
+
+                    data = response.get_json()
+                    self.assertIsInstance(data, dict)
+                    self.assertTrue(
+                        {"status", "error", "message"} <= set(data)
+                    )
+                    self.assertEqual(data["status"], 400)
+
+                    message = data["message"].lower()
+                    for internal in (
+                        "insert into",
+                        "sqlalchemy",
+                        "psycopg",
+                        "parameters:",
+                    ):
+                        self.assertNotIn(internal, message)
+                finally:
+                    db.session.rollback()
+
+    def test_query_oversized_user_id(self):
+        """It should reject an oversized query ID without a server error"""
+        response = self.client.get(
+            BASE_URL,
+            query_string={"user_id": str(2**63)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+
+        self.assertIsInstance(data, dict)
+        self.assertEqual(data["status"], 400)
+        self.assertTrue(
+            {"status", "error", "message"} <= set(data)
+        )
+
+    def test_overlong_item_name_error(self):
+        """It should reject a name exceeding VARCHAR(64) without SQL details"""
+        cart = self._create_shopcart(user_id=101)
+
+        try:
+            response = self.client.post(
+                f"{BASE_URL}/{cart.id}/items",
+                json=make_item(name="A" * 65),
+            )
+
+            self.assertEqual(response.status_code, 400)
+            data = response.get_json()
+            self.assertTrue(
+                {"status", "error", "message"} <= set(data)
+            )
+            self.assertEqual(data["status"], 400)
+
+            message = data["message"].lower()
+            for internal in ("insert into", "sqlalchemy", "psycopg", "parameters:"):
+                self.assertNotIn(internal, message)
+        finally:
+            db.session.rollback()
+
+    def test_oversized_path_ids_error(self):
+        """It should handle oversized URL IDs without database exceptions"""
+        cart = self._create_shopcart(user_id=101)
+        huge_id = 2**63
+
+        paths = [
+            f"{BASE_URL}/{huge_id}",
+            f"{BASE_URL}/{huge_id}/items",
+            f"{BASE_URL}/{cart.id}/items/{huge_id}",
+        ]
+
+        for path in paths:
+            with self.subTest(path=path):
+                try:
+                    response = self.client.get(path)
+
+                    self.assertIn(response.status_code, (400, 404))
+                    data = response.get_json()
+                    self.assertIsInstance(data, dict)
+                    self.assertTrue(
+                        {"status", "error", "message"} <= set(data)
+                    )
+                    self.assertEqual(data["status"], response.status_code)
+                finally:
+                    db.session.rollback()
+
+    def test_database_integrity_error_is_sanitized(self):
+        """It should not expose SQL and parameters after an integrity error"""
+        error = IntegrityError(
+            "INSERT INTO shopcart (user_id) VALUES (:user_id)",
+            {"user_id": 101},
+            Exception("Example database constraint failure"),
+        )
+
+        with patch.object(db.session, "commit", side_effect=error):
+            response = self.client.post(
+                BASE_URL,
+                json={"user_id": 101},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertIsInstance(data, dict)
+        self.assertTrue({"status", "error", "message"} <= set(data))
+        self.assertEqual(data["status"], 400)
+
+        message = data["message"].lower()
+        for internal in ("insert into", "sqlalchemy", "parameters:", "constraint failure"):
+            self.assertNotIn(internal, message)
 
     ######################################################################
     #  S W A G G E R   Q U E R Y   A N D   C H E C K O U T   (#60)

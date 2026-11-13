@@ -29,6 +29,54 @@ def is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+# PostgreSQL INTEGER and NUMERIC(10, 2) column limits
+DB_INTEGER_MIN = -(2**31)
+DB_INTEGER_MAX = 2**31 - 1
+MAX_ITEM_PRICE = Decimal("99999999.99")
+
+
+def is_database_integer(value):
+    """Returns True for an integer within PostgreSQL INTEGER limits"""
+    return is_int(value) and DB_INTEGER_MIN <= value <= DB_INTEGER_MAX
+
+
+def validate_item_price(value):
+    """Validates and converts an Item price to Decimal"""
+    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)):
+        raise DataValidationError(
+            "Invalid Item: price must be a non-negative number"
+        )
+
+    price = Decimal(str(value))
+
+    if not price.is_finite() or price < 0:
+        raise DataValidationError(
+            "Invalid Item: price must be a non-negative number"
+        )
+
+    if price > MAX_ITEM_PRICE:
+        raise DataValidationError(
+            "Invalid Item: price exceeds database numeric range"
+        )
+
+    return price
+
+
+def validate_item_name(value):
+    """Validates an Item name against the database column limit"""
+    if not isinstance(value, str) or not value:
+        raise DataValidationError(
+            "Invalid Item: name must be a non-empty string"
+        )
+
+    if len(value) > 64:
+        raise DataValidationError(
+            "Invalid Item: name must be 64 characters or fewer"
+        )
+
+    return value
+
+
 # Shopcart.status values. Only the checkout action (#34) moves a cart to CHECKED_OUT.
 STATUS_OPEN = "OPEN"
 STATUS_CHECKED_OUT = "CHECKED_OUT"
@@ -53,8 +101,8 @@ class PersistentBase:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error creating record: %s", self)
-            raise DataValidationError(e) from e
+            logger.error("Error creating record: %s: %s", self, e)
+            raise DataValidationError("Database operation failed") from e
 
     def update(self):
         """
@@ -69,8 +117,8 @@ class PersistentBase:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error updating record: %s", self)
-            raise DataValidationError(e) from e
+            logger.error("Error updating record: %s: %s", self, e)
+            raise DataValidationError("Database operation failed") from e
 
     def delete(self):
         """Removes the record from the data store"""
@@ -80,8 +128,8 @@ class PersistentBase:
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            logger.error("Error deleting record: %s", self)
-            raise DataValidationError(e) from e
+            logger.error("Error deleting record: %s: %s", self, e)
+            raise DataValidationError("Database operation failed") from e
 
     @classmethod
     def all(cls):
@@ -91,8 +139,12 @@ class PersistentBase:
 
     @classmethod
     def find(cls, by_id):
-        """Finds a record by it's ID"""
+        """Finds a record by its ID without querying invalid integers"""
         logger.info("Processing %s lookup for id %s ...", cls.__name__, by_id)
+
+        if not is_database_integer(by_id):
+            return None
+
         return cls.query.session.get(cls, by_id)
 
 
@@ -150,6 +202,19 @@ class Item(db.Model, PersistentBase):
             raise DataValidationError(
                 "Invalid Item: body of request contained bad or no data"
             )
+
+        # Keep existing behavior: id and shopcart_id are server-managed.
+        allowed_fields = {
+            "product_id", "name", "quantity", "price",
+            "id", "shopcart_id",
+        }
+        unknown_fields = set(data) - allowed_fields
+        if unknown_fields:
+            raise DataValidationError(
+                "Invalid Item: unknown fields: "
+                + ", ".join(sorted(unknown_fields))
+            )
+
         try:
             product_id = data["product_id"]
             name = data["name"]
@@ -162,22 +227,20 @@ class Item(db.Model, PersistentBase):
 
         if not is_int(product_id):
             raise DataValidationError("Invalid Item: product_id must be an integer")
-        if not isinstance(name, str) or not name:
-            raise DataValidationError("Invalid Item: name must be a non-empty string")
+        if not is_database_integer(product_id):
+            raise DataValidationError(
+                "Invalid Item: product_id exceeds database integer range"
+            )
+        name = validate_item_name(name)
         if not is_int(quantity) or quantity <= 0:
             raise DataValidationError(
                 "Invalid Item: quantity must be a positive integer"
             )
-        if isinstance(price, bool) or not isinstance(price, (int, float, Decimal)):
+        if not is_database_integer(quantity):
             raise DataValidationError(
-                "Invalid Item: price must be a non-negative number"
+                "Invalid Item: quantity exceeds database integer range"
             )
-        price = Decimal(str(price))
-        # JSON allows NaN and Infinity, which are not valid prices
-        if not price.is_finite() or price < 0:
-            raise DataValidationError(
-                "Invalid Item: price must be a non-negative number"
-            )
+        price = validate_item_price(price)
 
         self.product_id = product_id
         self.name = name
@@ -300,6 +363,19 @@ class Shopcart(db.Model, PersistentBase):
             raise DataValidationError(
                 "Invalid Shopcart: body of request contained bad or no data"
             )
+
+        # These server-managed fields are deliberately ignored.
+        allowed_fields = {
+            "user_id", "items", "id", "status",
+            "created_at", "last_updated",
+        }
+        unknown_fields = set(data) - allowed_fields
+        if unknown_fields:
+            raise DataValidationError(
+                "Invalid Shopcart: unknown fields: "
+                + ", ".join(sorted(unknown_fields))
+            )
+
         try:
             user_id = data["user_id"]
         except KeyError as error:
@@ -308,6 +384,10 @@ class Shopcart(db.Model, PersistentBase):
             ) from error
         if not is_int(user_id):
             raise DataValidationError("Invalid Shopcart: user_id must be an integer")
+        if not is_database_integer(user_id):
+            raise DataValidationError(
+                "Invalid Shopcart: user_id exceeds database integer range"
+            )
 
         items = None
         if "items" in data:
