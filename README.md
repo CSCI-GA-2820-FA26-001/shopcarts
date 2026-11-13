@@ -70,7 +70,7 @@ Open:
 
 http://localhost:8080/
 
-The root endpoint returns JSON containing the service name, version, and Shopcarts collection URL.
+The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear, Search, Retrieve, List All, Update and Delete already work. Search shows the shopcarts of the User ID you enter, or every shopcart when it is empty, and fills the form with the first result. Retrieve fills the form with the shopcart whose ID you enter. List All shows every shopcart and leaves the form alone. Update changes the User ID of the shopcart in the form and keeps its items. Delete removes a shopcart by ID and clears the form.
 
 The Swagger UI at http://localhost:8080/apidocs/ documents the endpoints under `/api` and lets you try them.
 
@@ -105,11 +105,11 @@ validated without deploying the Shopcarts API; API wiring belongs to Story #36.
 
 ## REST API Endpoints
 
-The service provides the following endpoints. The Shopcart and Item endpoints are under `/api` and documented at `/apidocs/`. The checkout endpoint moves under `/api` in #60.
+The service provides the following endpoints. The Shopcart and Item endpoints are under `/api` and documented at `/apidocs/`. The checkout endpoint is also implemented using Flask-RESTX.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| GET | `/` | Return service information |
+| GET | `/` | The Shopcarts admin page |
 | GET | `/health` | Health check for Kubernetes probes; returns `{"status": "OK"}` |
 | GET | `/apidocs/` | Swagger UI for the `/api` endpoints |
 | POST | `/api/shopcarts` | Create a shopping cart |
@@ -122,7 +122,7 @@ The service provides the following endpoints. The Shopcart and Item endpoints ar
 | GET | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Retrieve a specific item from a shopping cart |
 | PUT | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Update an existing item in a shopping cart |
 | DELETE | `/api/shopcarts/{shopcart_id}/items/{item_id}` | Delete an item from a shopping cart |
-| PUT | `/shopcarts/{shopcart_id}/checkout` | Check out a shopping cart (action) |
+| PUT | `/api/shopcarts/{shopcart_id}/checkout` | Check out a shopping cart (action) |
 
 ### Shopcart Data Model
 
@@ -252,7 +252,7 @@ A successful deletion returns `204 No Content`.
 ### Check Out a Shopping Cart
 
 ```bash
-curl -X PUT http://localhost:8080/shopcarts/1/checkout
+curl -X PUT http://localhost:8080/api/shopcarts/1/checkout
 ```
 
 No request body is needed. A successful checkout returns `200 OK` with the shopcart and `"status": "CHECKED_OUT"`; its items are unchanged. Checking out a cart that is already checked out returns `200 OK` with the same shopcart. An empty shopcart returns `400 Bad Request`, and a missing shopcart returns `404 Not Found`.
@@ -275,6 +275,32 @@ make lint
 
 This command runs Flake8 and Pylint against the application and test code.
 
+### Run the BDD Tests
+
+The Behave scenarios in `features/` drive the admin web page in a headless browser with Selenium. The Dev Container is built from `quay.io/rofrano/pipeline-selenium`, which includes Chromium, Firefox and their drivers. If you opened the container before this change, rebuild it with **Dev Containers: Rebuild Container**.
+
+Start the service in one terminal:
+
+```bash
+honcho start
+```
+
+Then run the scenarios in another:
+
+```bash
+behave
+```
+
+`behave` exits with a non-zero code if any step fails. These environment variables change how it runs:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8080` | Where the service is running |
+| `WAIT_SECONDS` | `30` | How long a step waits for the page |
+| `DRIVER` | `chrome` | `chrome` or `firefox` |
+
+Each scenario starts with `Given the following shopcarts`, which deletes every shopcart through the REST API and creates one per table row. `Given the following items in the shopcart of customer "<user_id>"` adds items to that customer's shopcart. The browser steps in `features/steps/web_steps.py` find fields and buttons by their label: the "User ID" field is `shopcart_user_id` and the "Search" button is `search-btn`. Every button handler on the page empties the `flash_message` when it is pressed and sets it when its request finishes, so `I should not see "<user_id>" in the results` waits for that message before it reads the table.
+
 ### Available Development Commands
 
 | Command | Purpose |
@@ -284,6 +310,32 @@ This command runs Flake8 and Pylint against the application and test code.
 | `make run` | Start the application |
 | `make test` | Run tests with coverage |
 | `make lint` | Run Flake8 and Pylint |
+| `make build` | Build the `cluster-registry:5000/shopcarts:1.0` image |
+| `make cluster` | Create the local K3D cluster with a registry |
+| `make push` | Push the image to the cluster registry |
+| `make deploy` | Apply the manifests in `k8s/` |
+
+## Docker and Kubernetes
+
+The `Dockerfile` builds a Python 3.12 image with the runtime dependencies only. It runs gunicorn as a non-root user on `$PORT`, which defaults to 8080:
+
+To try the image from the Dev Container terminal against the development database, stop `make run` first, since both use port 8080:
+
+```bash
+make build
+docker run --rm --network host -e DATABASE_URI="$DATABASE_URI" cluster-registry:5000/shopcarts:1.0
+```
+
+The Dev Container already sets `DATABASE_URI` to its Postgres database, and `--network host` lets the container reach it as `postgres`. To use another database, set it in quotes, for example `-e DATABASE_URI="postgresql+psycopg://postgres:pgs3cr3t@postgres:5432/postgres"`.
+
+`k8s/` deploys the service and its Postgres database to the K3D cluster, reachable at http://localhost:8080 through an Ingress. See [k8s/README.md](k8s/README.md) for the full steps, including the Secrets to create once:
+
+```bash
+make cluster
+make build push
+make deploy
+bash k8s/verify.sh
+```
 
 ## Project Structure
 
@@ -295,13 +347,20 @@ shopcarts/
 │   ├── config.py           # Application configuration
 │   ├── models.py           # Shopcart and Item models
 │   ├── routes.py           # REST API routes
+│   ├── static/             # Admin page: index.html, rest_api.js, Bootstrap and jQuery
 │   └── common/             # Error handling, logging, utilities
+├── features/               # BDD scenarios
+│   ├── environment.py      # Browser setup for Behave
+│   ├── shopcarts.feature
+│   └── steps/              # Data loading and web page steps
 ├── tests/
 │   ├── factories.py        # Test data factories
 │   ├── test_cli_commands.py
 │   ├── test_models.py
 │   └── test_routes.py
+├── k8s/                    # Kubernetes manifests for the service and Postgres
 ├── wsgi.py                 # Application entry point
+├── Dockerfile              # Container image for the service
 ├── Procfile                # Application process configuration
 ├── Pipfile                 # Python dependencies
 ├── Makefile                # Development commands

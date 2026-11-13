@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopcarts
+  labels:
+    app: shopcarts
+    app.kubernetes.io/part-of: shopcarts
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shopcarts
+  template:
+    metadata:
+      labels:
+        app: shopcarts
+        app.kubernetes.io/part-of: shopcarts
+    spec:
+      # The service exits if it can't reach the database on start, so wait for it
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgres -p 5432; do echo waiting for postgres; sleep 2; done
+      containers:
+        - name: shopcarts
+          image: cluster-registry:5000/shopcarts:1.0
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            # Reuses the password Secret from #38. Kubernetes expands $(POSTGRES_PASSWORD)
+            # because it is defined above DATABASE_URI.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URI
+              value: postgresql+psycopg://postgres:$(POSTGRES_PASSWORD)@postgres:5432/shopcarts
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: shopcarts-secret
+                  key: SECRET_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

@@ -21,7 +21,7 @@ This service implements a REST API that allows you to Create, Read, Update
 and Delete Shopcart
 """
 
-from flask import jsonify, request, url_for, abort
+from flask import jsonify, request, abort
 from flask import current_app as app  # Import Flask application
 from flask_restx import Api, Resource, fields
 from service.models import Shopcart, Item, SHOPCART_STATUSES, is_database_integer
@@ -33,16 +33,9 @@ from service.common import status  # HTTP Status Codes
 ######################################################################
 @app.route("/")
 def index():
-    """Root URL response"""
+    """Serves the admin page"""
     app.logger.info("Request for Root URL")
-    return (
-        jsonify(
-            name="Shopcart REST API Service",
-            version="1.0",
-            paths=url_for("shopcart_collection", _external=True),
-        ),
-        status.HTTP_200_OK,
-    )
+    return app.send_static_file("index.html")
 
 
 ######################################################################
@@ -221,7 +214,17 @@ class ShopcartCollection(Resource):
     # ------------------------------------------------------------------
     # LIST ALL SHOPCARTS
     # ------------------------------------------------------------------
-    @api.doc("list_shopcarts")
+    @api.doc(
+        "list_shopcarts",
+        params={
+            "user_id": {
+                "description": "Optional customer ID used to filter Shopcarts",
+                "type": "integer",
+                "in": "query",
+                "required": False,
+            }
+        },
+    )
     @api.response(400, "user_id was not an integer")
     @api.marshal_list_with(shopcart_model)
     def get(self):
@@ -439,23 +442,35 @@ def find_item_or_404(shopcart_id, item_id):
 ######################################################################
 # CHECKOUT A SHOPCART (ACTION)
 ######################################################################
-@app.route("/shopcarts/<int:shopcart_id>/checkout", methods=["PUT"])
-def checkout_shopcart(shopcart_id):
-    """
-    Checkout a Shopcart
+@api.route("/shopcarts/<int:shopcart_id>/checkout")
+@api.param("shopcart_id", "The Shopcart identifier")
+class CheckoutResource(Resource):
+    """Handles the checkout action for a Shopcart"""
 
-    This action moves a Shopcart to CHECKED_OUT. No request body is needed.
-    Checking out an already checked out cart returns it unchanged.
-    """
-    app.logger.info("Request to checkout Shopcart with id: %s", shopcart_id)
+    @api.doc("checkout_shopcart")
+    @api.response(400, "Cannot check out an empty Shopcart")
+    @api.response(404, "Shopcart not found")
+    @api.marshal_with(shopcart_model, code=200)
+    def put(self, shopcart_id):
+        """
+        Check out a Shopcart
 
-    shopcart = Shopcart.find(shopcart_id)
-    if not shopcart:
-        abort(
-            status.HTTP_404_NOT_FOUND,
-            f"Shopcart with id '{shopcart_id}' could not be found.",
+        Changes an OPEN Shopcart to CHECKED_OUT.
+        An empty Shopcart cannot be checked out.
+        Repeated checkout is idempotent.
+        No request body is required.
+        """
+        app.logger.info(
+            "Request to checkout Shopcart with id: %s", shopcart_id
         )
 
-    shopcart.checkout()
+        shopcart = Shopcart.find(shopcart_id)
+        if not shopcart:
+            abort(
+                status.HTTP_404_NOT_FOUND,
+                f"Shopcart with id '{shopcart_id}' could not be found.",
+            )
 
-    return jsonify(shopcart.serialize()), status.HTTP_200_OK
+        shopcart.checkout()
+
+        return shopcart.serialize(), status.HTTP_200_OK
