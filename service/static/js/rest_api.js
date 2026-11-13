@@ -76,6 +76,36 @@ function load_results(user_id) {
 
 $(function () {
     // ****************************************
+    //  C R E A T E   A   S H O P C A R T
+    // ****************************************
+    $("#create-btn").click(function () {
+        const user_id = $("#shopcart_user_id").val().trim();
+
+        // Send an empty object when User ID is missing so the API
+        // can return its validation message.
+        const payload = user_id
+            ? { user_id: Number.isSafeInteger(Number(user_id))
+                ? Number(user_id) : user_id }
+            : {};
+
+        flash_message("");
+
+        $.ajax({
+            type: "POST",
+            url: BASE_URL,
+            contentType: "application/json",
+            data: JSON.stringify(payload),
+        })
+            .done(function (shopcart) {
+                update_form_data(shopcart);
+                flash_message("Success");
+            })
+            .fail(function (xhr) {
+                flash_message(error_message(xhr));
+            });
+    });
+
+    // ****************************************
     //  C L E A R   T H E   F O R M
     // ****************************************
     $("#clear-btn").click(function () {

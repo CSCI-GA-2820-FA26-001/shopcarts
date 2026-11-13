@@ -70,7 +70,7 @@ Open:
 
 http://localhost:8080/
 
-The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear, Search, Retrieve, List All, Update and Delete already work. Search shows the shopcarts of the User ID you enter, or every shopcart when it is empty, and fills the form with the first result. Retrieve fills the form with the shopcart whose ID you enter. List All shows every shopcart and leaves the form alone. Update changes the User ID of the shopcart in the form and keeps its items. Delete removes a shopcart by ID and clears the form.
+The root URL serves the Shopcarts admin page, a web page for working with shopcarts without curl or Postman. The buttons get wired up one story at a time (#69–#73, #53, #56); Clear, Create, Search, Retrieve, List All, Update and Delete already work. Create makes an OPEN shopcart for the entered User ID, fills the form with its generated ID, and displays a success or validation message. Search shows the shopcarts of the User ID you enter, or every shopcart when it is empty, and fills the form with the first result. Retrieve fills the form with the shopcart whose ID you enter. List All shows every shopcart and leaves the form alone. Update changes the User ID of the shopcart in the form and keeps its items. Delete removes a shopcart by ID and clears the form.
 
 The Swagger UI at http://localhost:8080/apidocs/ documents the endpoints under `/api` and lets you try them.
 

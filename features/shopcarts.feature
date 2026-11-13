@@ -151,3 +151,21 @@ Scenario: Delete without a Shopcart ID
     When I visit the "Home Page"
     And I press the "Delete" button
     Then I should see the message "Enter a Shopcart ID to delete"
+
+Scenario: Create a shopcart from the admin page
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Create" button
+    Then I should see the message "Success"
+    And the "Status" field should contain "OPEN"
+    When I copy the "Shopcart ID" field
+    And I press the "Clear" button
+    And I paste the "Shopcart ID" field
+    And I press the "Retrieve" button
+    Then I should see the message "Success"
+    And the "User ID" field should contain "101"
+
+Scenario: Cannot create a shopcart without a User ID
+    When I visit the "Home Page"
+    And I press the "Create" button
+    Then I should see the message "user_id"
