@@ -3,7 +3,7 @@
  *
  * Each button gets its click handler in its own story: create (#69),
  * retrieve (#70), update (#71), delete (#72), list (#73), search (#53)
- * and checkout (#56). Only Clear is set up here.
+ * and checkout (#56).
  */
 
 // The Shopcart API, documented at /apidocs/
@@ -212,6 +212,30 @@ $(function () {
                 clear_form_data();
                 update_results([]);
                 flash_message("Shopcart has been deleted");
+            })
+            .fail(function (xhr) {
+                flash_message(error_message(xhr));
+            });
+    });
+
+    // ****************************************
+    //  C H E C K   O U T   A   S H O P C A R T
+    // ****************************************
+    $("#checkout-btn").click(function () {
+        const shopcart_id = $("#shopcart_id").val().trim();
+        if (!shopcart_id) {
+            flash_message("Enter a Shopcart ID to check out");
+            return;
+        }
+
+        flash_message("");
+        $.ajax({
+            type: "PUT",
+            url: `${BASE_URL}/${encodeURIComponent(shopcart_id)}/checkout`,
+        })
+            .done(function (shopcart) {
+                update_form_data(shopcart);
+                flash_message("Success");
             })
             .fail(function (xhr) {
                 flash_message(error_message(xhr));

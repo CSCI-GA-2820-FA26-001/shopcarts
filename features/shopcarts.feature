@@ -169,3 +169,50 @@ Scenario: Cannot create a shopcart without a User ID
     When I visit the "Home Page"
     And I press the "Create" button
     Then I should see the message "user_id"
+
+Scenario: Check out a shopcart from the admin page
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    And the "Status" field should contain "OPEN"
+    When I press the "Checkout" button
+    Then I should see the message "Success"
+    And the "Status" field should contain "CHECKED_OUT"
+    When I copy the "Shopcart ID" field
+    And I press the "Clear" button
+    And I paste the "Shopcart ID" field
+    And I press the "Retrieve" button
+    Then I should see the message "Success"
+    And the "User ID" field should contain "101"
+    And the "Status" field should contain "CHECKED_OUT"
+    And the shopcart of customer "101" should have 1 item
+
+Scenario: Cannot check out an empty shopcart
+    When I visit the "Home Page"
+    And I set the "User ID" to "202"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I press the "Checkout" button
+    Then I should see the message "can't check out an empty shopcart"
+    And the "Status" field should contain "OPEN"
+    When I copy the "Shopcart ID" field
+    And I press the "Clear" button
+    And I paste the "Shopcart ID" field
+    And I press the "Retrieve" button
+    Then I should see the message "Success"
+    And the "User ID" field should contain "202"
+    And the "Status" field should contain "OPEN"
+    And the shopcart of customer "202" should have 0 items
+
+Scenario: Cannot check out without a Shopcart ID
+    When I visit the "Home Page"
+    And I press the "Checkout" button
+    Then I should see the message "Enter a Shopcart ID to check out"
+
+Scenario: Cannot check out a shopcart that does not exist
+    When I visit the "Home Page"
+    And I set the "Shopcart ID" to "0"
+    And I press the "Checkout" button
+    Then I should see the message "could not be found"
+    And the "Status" field should be empty
