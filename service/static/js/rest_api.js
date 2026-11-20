@@ -52,6 +52,22 @@ function error_message(xhr) {
     return `Server error: ${xhr.status}`;
 }
 
+// Drops the details of the last Shopcart but keeps the ID that was typed
+function clear_shopcart_details() {
+    $("#shopcart_user_id").val("");
+    $("#shopcart_status").val("");
+}
+
+// Returns the User ID as a number when it is a whole number like "42".
+// Anything else, like "abc", "1e2" or "0x10", is sent as typed so the API
+// rejects it with its own message.
+function user_id_value(user_id) {
+    if (/^-?\d+$/.test(user_id) && Number.isSafeInteger(Number(user_id))) {
+        return Number(user_id);
+    }
+    return user_id;
+}
+
 // Shows the Shopcarts of a customer in the results table, or every
 // Shopcart when user_id is empty. Returns the request so callers can
 // add their own done() handler.
@@ -83,10 +99,7 @@ $(function () {
 
         // Send an empty object when User ID is missing so the API
         // can return its validation message.
-        const payload = user_id
-            ? { user_id: Number.isSafeInteger(Number(user_id))
-                ? Number(user_id) : user_id }
-            : {};
+        const payload = user_id ? { user_id: user_id_value(user_id) } : {};
 
         flash_message("");
 
@@ -117,15 +130,21 @@ $(function () {
     //  S E A R C H   B Y   C U S T O M E R
     // ****************************************
     $("#search-btn").click(function () {
-        load_results($("#shopcart_user_id").val().trim()).done(function (shopcarts) {
-            // Fill the form with the first result, so a cart can be found by its customer
-            if (shopcarts.length > 0) {
-                update_form_data(shopcarts[0]);
-            } else {
+        load_results($("#shopcart_user_id").val().trim())
+            .done(function (shopcarts) {
+                // Fill the form with the first result, so a cart can be found by its customer
+                if (shopcarts.length > 0) {
+                    update_form_data(shopcarts[0]);
+                } else {
+                    $("#shopcart_id").val("");
+                    $("#shopcart_status").val("");
+                }
+            })
+            .fail(function () {
+                // Don't leave the last cart in the form, or Delete and Checkout would act on it
                 $("#shopcart_id").val("");
                 $("#shopcart_status").val("");
-            }
-        });
+            });
     });
 
     // ****************************************
@@ -148,9 +167,7 @@ $(function () {
                 flash_message("Success");
             })
             .fail(function (xhr) {
-                // Keep the ID that was typed, but drop the details of the last cart
-                $("#shopcart_user_id").val("");
-                $("#shopcart_status").val("");
+                clear_shopcart_details();
                 flash_message(error_message(xhr));
             });
     });
@@ -180,13 +197,16 @@ $(function () {
             contentType: "application/json",
             // No "items", so the API keeps the Items of the Shopcart.
             // A User ID that isn't a whole number is sent as is for the API to reject.
-            data: JSON.stringify({ user_id: Number.isInteger(Number(user_id)) ? Number(user_id) : user_id }),
+            data: JSON.stringify({ user_id: user_id_value(user_id) }),
         })
             .done(function (shopcart) {
                 update_form_data(shopcart);
                 flash_message("Success");
             })
             .fail(function (xhr) {
+                if (xhr.status === 404) {
+                    clear_shopcart_details();
+                }
                 flash_message(error_message(xhr));
             });
     });
@@ -238,6 +258,10 @@ $(function () {
                 flash_message("Success");
             })
             .fail(function (xhr) {
+                // An empty cart (400) didn't change, so only a missing cart clears the form
+                if (xhr.status === 404) {
+                    clear_shopcart_details();
+                }
                 flash_message(error_message(xhr));
             });
     });
