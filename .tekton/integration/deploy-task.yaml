@@ -1,0 +1,24 @@
+# PipelineTask fragment for cd-pipeline.spec.tasks; NOT an applyable Kubernetes resource.
+# Integrate after #65 and #66: the build task must be named build and expose IMAGE_DIGEST.
+- name: deploy
+  runAfter:
+    - build
+  taskRef:
+    resolver: cluster
+    params:
+      - name: kind
+        value: task
+      - name: name
+        value: openshift-client
+      - name: namespace
+        value: openshift-pipelines
+  params:
+    - name: SCRIPT
+      value: |
+        #!/bin/sh
+        set -eu
+        cd /workspace/manifest_dir
+        sh .tekton/scripts/deploy.sh '$(params.APP_NAME)' '$(params.IMAGE_NAME)' '$(tasks.build.results.IMAGE_DIGEST)'
+  workspaces:
+    - name: manifest_dir
+      workspace: pipeline-workspace
