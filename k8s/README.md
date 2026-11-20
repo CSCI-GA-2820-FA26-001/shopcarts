@@ -22,30 +22,24 @@ make push
 `make push` needs `cluster-registry` to resolve to `127.0.0.1`. If it doesn't,
 add `127.0.0.1 cluster-registry` to `/etc/hosts`.
 
-## 2. Create the Secrets once
-
-The service reads its credentials from two Secrets. Neither is in Git, because
-`make deploy` applies every YAML file under `k8s/`.
-
-`postgres-secret` holds the database password. If it doesn't exist yet, create it
-as described in [`postgres/README.md`](postgres/README.md#create-the-password-secret-once).
-The Deployment builds `DATABASE_URI` from it, so the password is never written
-in a manifest.
-
-`shopcarts-secret` holds the Flask `SECRET_KEY`:
-
-```bash
-kubectl --context k3d-nyu-devops -n default get secret shopcarts-secret || \
-kubectl --context k3d-nyu-devops -n default create secret generic shopcarts-secret \
-  --from-literal=SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex())')"
-```
-
-## 3. Deploy
+## 2. Deploy
 
 ```bash
 make deploy
 kubectl --context k3d-nyu-devops -n default get pods,service,ingress -l app.kubernetes.io/part-of=shopcarts
 ```
+
+The service reads its credentials from two Secrets, which `make deploy` creates
+with random values the first time it runs (#91):
+
+- `postgres-secret` holds the database password. The Deployment builds
+  `DATABASE_URI` from it, so the password is never written in a manifest.
+- `shopcarts-secret` holds the Flask `SECRET_KEY`.
+
+Neither is in Git, because `make deploy` applies every YAML file under `k8s/`.
+A Secret that already exists is never replaced, since Postgres keeps the password
+it was first started with. `make deploy` uses your current kubectl context and
+namespace, like `kubectl apply`.
 
 The shopcarts pods wait for Postgres in an init container, then start. Expect both
 to be `Running` with `1/1` Ready.
@@ -60,7 +54,7 @@ After pushing a new image with the same tag, restart the pods to pull it:
 kubectl --context k3d-nyu-devops -n default rollout restart deployment/shopcarts
 ```
 
-## 4. Verify the acceptance criteria
+## 3. Verify the acceptance criteria
 
 ```bash
 bash k8s/verify.sh
@@ -80,3 +74,4 @@ kubectl --context k3d-nyu-devops -n default logs -l app=shopcarts -c wait-for-po
 ```
 
 A pod stuck in `CreateContainerConfigError` usually means one of the Secrets is missing.
+Run `make secrets` (or `make deploy`) to create it.

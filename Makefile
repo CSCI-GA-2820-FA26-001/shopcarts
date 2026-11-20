@@ -68,8 +68,19 @@ import: ## Import the image into the local K3D cluster
 	$(info Importing $(IMAGE) into k3d cluster $(CLUSTER)...)
 	k3d image import --cluster $(CLUSTER) $(IMAGE)
 
+.PHONY: secrets
+secrets: ## Create the Kubernetes Secrets if they don't exist yet
+	$(info Creating the Kubernetes Secrets if needed...)
+	# An existing postgres-secret is kept: Postgres keeps the password it was first started with
+	kubectl get secret postgres-secret >/dev/null 2>&1 || \
+		kubectl create secret generic postgres-secret \
+		--from-literal=POSTGRES_PASSWORD="$$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+	kubectl get secret shopcarts-secret >/dev/null 2>&1 || \
+		kubectl create secret generic shopcarts-secret \
+		--from-literal=SECRET_KEY="$$(python3 -c 'import secrets; print(secrets.token_hex())')"
+
 .PHONY: deploy
-deploy: ## Deploy the service on local Kubernetes
+deploy: secrets ## Deploy the service on local Kubernetes
 	$(info Deploying service locally...)
 	kubectl apply -R -f k8s/
 

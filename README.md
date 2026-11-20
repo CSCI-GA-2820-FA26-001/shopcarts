@@ -313,7 +313,7 @@ Each scenario starts with `Given the following shopcarts`, which deletes every s
 | `make build` | Build the `cluster-registry:5000/shopcarts:1.0` image |
 | `make cluster` | Create the local K3D cluster with a registry |
 | `make push` | Push the image to the cluster registry |
-| `make deploy` | Apply the manifests in `k8s/` |
+| `make deploy` | Create the Secrets if they don't exist yet, then apply the manifests in `k8s/` |
 
 ## Docker and Kubernetes
 
@@ -328,7 +328,7 @@ docker run --rm --network host -e DATABASE_URI="$DATABASE_URI" cluster-registry:
 
 The Dev Container already sets `DATABASE_URI` to its Postgres database, and `--network host` lets the container reach it as `postgres`. To use another database, set it in quotes, for example `-e DATABASE_URI="postgresql+psycopg://postgres:pgs3cr3t@postgres:5432/postgres"`.
 
-`k8s/` deploys the service and its Postgres database to the K3D cluster, reachable at http://localhost:8080 through an Ingress. See [k8s/README.md](k8s/README.md) for the full steps, including the Secrets to create once:
+`k8s/` deploys the service and its Postgres database to the K3D cluster, reachable at http://localhost:8080 through an Ingress. `make deploy` creates the Secrets the first time it runs, so these commands are all it takes. See [k8s/README.md](k8s/README.md) for the details:
 
 ```bash
 make cluster
