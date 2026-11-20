@@ -250,16 +250,33 @@ class TestYourResourceService(TestCase):
                 self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(len(Item.all()), 1)
 
-    def test_item_not_found_messages_unchanged(self):
-        """It should return the same 404 messages for the Item routes"""
+    def test_item_not_found_messages(self):
+        """It should return the same 404 message format as the Shopcart routes"""
         shopcart = self._create_shopcart()
+        other = self._create_shopcart()
+        other_item = self.client.post(f"{BASE_URL}/{other.id}/items", json=make_item()).get_json()
         cases = [
+            ("get", f"{BASE_URL}/0", "Shopcart with id '0' could not be found."),
             ("get", f"{BASE_URL}/0/items", "Shopcart with id '0' could not be found."),
-            ("post", f"{BASE_URL}/0/items", "Shopcart not found"),
-            ("get", f"{BASE_URL}/0/items/1", "Shopcart not found"),
-            ("put", f"{BASE_URL}/0/items/1", "Shopcart not found"),
-            ("get", f"{BASE_URL}/{shopcart.id}/items/0", "Item not found in this shopcart"),
-            ("put", f"{BASE_URL}/{shopcart.id}/items/0", "Item not found in this shopcart"),
+            ("post", f"{BASE_URL}/0/items", "Shopcart with id '0' could not be found."),
+            ("get", f"{BASE_URL}/0/items/1", "Shopcart with id '0' could not be found."),
+            ("put", f"{BASE_URL}/0/items/1", "Shopcart with id '0' could not be found."),
+            (
+                "get",
+                f"{BASE_URL}/{shopcart.id}/items/0",
+                f"Item with id '0' could not be found in Shopcart '{shopcart.id}'.",
+            ),
+            (
+                "put",
+                f"{BASE_URL}/{shopcart.id}/items/0",
+                f"Item with id '0' could not be found in Shopcart '{shopcart.id}'.",
+            ),
+            # An Item of another Shopcart is not found in this one
+            (
+                "get",
+                f"{BASE_URL}/{shopcart.id}/items/{other_item['id']}",
+                f"Item with id '{other_item['id']}' could not be found in Shopcart '{shopcart.id}'.",
+            ),
         ]
         for method, url, message in cases:
             with self.subTest(method=method, url=url):

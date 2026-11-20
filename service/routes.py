@@ -409,7 +409,10 @@ class ItemCollection(Resource):
 
         shopcart = Shopcart.find(shopcart_id)
         if shopcart is None:
-            abort(status.HTTP_404_NOT_FOUND, "Shopcart not found")
+            abort(
+                status.HTTP_404_NOT_FOUND,
+                f"Shopcart with id '{shopcart_id}' could not be found.",
+            )
 
         item = Item()
         item.deserialize(request.get_json())
@@ -430,11 +433,17 @@ def find_item_or_404(shopcart_id, item_id):
     """Returns the Item of the Shopcart, or aborts with 404 if either doesn't exist"""
     shopcart = Shopcart.find(shopcart_id)
     if shopcart is None:
-        abort(status.HTTP_404_NOT_FOUND, "Shopcart not found")
+        abort(
+            status.HTTP_404_NOT_FOUND,
+            f"Shopcart with id '{shopcart_id}' could not be found.",
+        )
 
     item = Item.find(item_id)
     if item is None or item.shopcart_id != shopcart_id:
-        abort(status.HTTP_404_NOT_FOUND, "Item not found in this shopcart")
+        abort(
+            status.HTTP_404_NOT_FOUND,
+            f"Item with id '{item_id}' could not be found in Shopcart '{shopcart_id}'.",
+        )
 
     return item
 
