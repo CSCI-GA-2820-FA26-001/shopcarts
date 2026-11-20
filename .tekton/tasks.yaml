@@ -1,0 +1,2 @@
+# Custom tasks for cd-pipeline that aren't on Tekton Hub.
+# Each task story adds its own task here, separated by "---".
