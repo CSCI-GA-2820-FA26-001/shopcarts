@@ -337,11 +337,36 @@ make deploy
 bash k8s/verify.sh
 ```
 
+## CD Pipeline (Tekton)
+
+`.tekton/` holds the CD pipeline that deploys the service to OpenShift (#57):
+
+- `workspace.yaml`: the `pipeline-pvc` PersistentVolumeClaim that every task shares
+- `pipeline.yaml`: the `cd-pipeline` Pipeline, with the params `GIT_REPO`, `GIT_REF`, `APP_NAME`, `IMAGE_NAME` and `BASE_URL`, and the `pipeline-workspace` workspace
+- `tasks.yaml`: our custom tasks that aren't on Tekton Hub
+
+Each task is added by its own story, so the pipeline grows one task at a time. For now it only has `init`, which empties the workspace because the PVC keeps the files of the last run.
+
+To apply the files and start a run from your OpenShift project:
+
+```bash
+oc apply -f .tekton/
+tkn pipeline start cd-pipeline \
+  -w name=pipeline-workspace,claimName=pipeline-pvc \
+  -p IMAGE_NAME=image-registry.openshift-image-registry.svc:5000/$(oc project -q)/shopcarts:latest \
+  -p BASE_URL=https://<your-route-host> \
+  --use-param-defaults --showlog
+tkn pipelinerun list
+```
+
+`GIT_REPO`, `GIT_REF` and `APP_NAME` default to this repository, `master` and `shopcarts`. Without `--use-param-defaults`, `tkn` asks for each of them. After changing a file in `.tekton/`, run `oc apply -f .tekton/` again before the next run.
+
 ## Project Structure
 
 ```text
 shopcarts/
 ├── .devcontainer/          # VS Code development environment
+├── .tekton/                # Tekton CD pipeline, its tasks and workspace
 ├── service/
 │   ├── __init__.py         # Flask application initialization
 │   ├── config.py           # Application configuration

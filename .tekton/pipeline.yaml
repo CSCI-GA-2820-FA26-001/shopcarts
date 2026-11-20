@@ -1,0 +1,65 @@
+# The CD pipeline for Shopcarts (#57).
+# Each task is added by its own story: clone (#61), lint (#62), tests (#58),
+# build (#66), deploy and BDD tests. Lint and tests run in parallel after clone.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: cd-pipeline
+spec:
+  description: Clones, checks, builds and deploys the Shopcarts service
+  params:
+    - name: GIT_REPO
+      description: The URL of the Git repository to build
+      type: string
+      default: https://github.com/CSCI-GA-2820-FA26-001/shopcarts.git
+    - name: GIT_REF
+      description: The branch, tag or commit to build
+      type: string
+      default: master
+    - name: APP_NAME
+      description: The name of the Deployment to update
+      type: string
+      default: shopcarts
+    - name: IMAGE_NAME
+      description: The full name of the image to build and deploy
+      type: string
+    - name: BASE_URL
+      description: The Route URL of the service, for the BDD tests
+      type: string
+  workspaces:
+    - name: pipeline-workspace
+      description: The shared workspace (pipeline-pvc) that holds the source code
+  tasks:
+    # Empties the workspace, which keeps the files of the last run,
+    # and shows what this run will build
+    - name: init
+      params:
+        - name: GIT_REPO
+          value: $(params.GIT_REPO)
+        - name: GIT_REF
+          value: $(params.GIT_REF)
+        - name: IMAGE_NAME
+          value: $(params.IMAGE_NAME)
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+      taskSpec:
+        params:
+          - name: GIT_REPO
+            type: string
+          - name: GIT_REF
+            type: string
+          - name: IMAGE_NAME
+            type: string
+        workspaces:
+          - name: source
+        steps:
+          - name: clean-workspace
+            image: quay.io/rofrano/python:3.12-slim
+            script: |
+              #!/bin/sh
+              set -e
+              echo "Building $(params.GIT_REPO) at $(params.GIT_REF) into $(params.IMAGE_NAME)"
+              echo "Removing the files of the last run from $(workspaces.source.path)"
+              find "$(workspaces.source.path)" -mindepth 1 -delete
+              ls -la "$(workspaces.source.path)"
