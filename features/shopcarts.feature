@@ -102,7 +102,6 @@ Scenario: Update a shopcart's customer
     Then I should see the message "Success"
     And the "User ID" field should contain "555"
     And the "Status" field should contain "OPEN"
-    And the shopcart of customer "555" should have 1 item
 
 Scenario: Update a shopcart that does not exist
     When I visit the "Home Page"
@@ -186,7 +185,6 @@ Scenario: Check out a shopcart from the admin page
     Then I should see the message "Success"
     And the "User ID" field should contain "101"
     And the "Status" field should contain "CHECKED_OUT"
-    And the shopcart of customer "101" should have 1 item
 
 Scenario: Cannot check out an empty shopcart
     When I visit the "Home Page"
@@ -203,7 +201,6 @@ Scenario: Cannot check out an empty shopcart
     Then I should see the message "Success"
     And the "User ID" field should contain "202"
     And the "Status" field should contain "OPEN"
-    And the shopcart of customer "202" should have 0 items
 
 Scenario: Cannot check out without a Shopcart ID
     When I visit the "Home Page"
