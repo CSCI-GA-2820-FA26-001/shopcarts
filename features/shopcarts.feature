@@ -216,3 +216,58 @@ Scenario: Cannot check out a shopcart that does not exist
     And I press the "Checkout" button
     Then I should see the message "could not be found"
     And the "Status" field should be empty
+
+Scenario: Search with a User ID that is not a number clears the old shopcart
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "User ID" to "abc"
+    And I press the "Search" button
+    Then I should see the message "user_id must be an integer"
+    And the "Shopcart ID" field should be empty
+    And the "Status" field should be empty
+
+Scenario: Update a shopcart that does not exist clears the old shopcart
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "Shopcart ID" to "0"
+    And I press the "Update" button
+    Then I should see the message "could not be found"
+    And the "Shopcart ID" field should contain "0"
+    And the "User ID" field should be empty
+    And the "Status" field should be empty
+
+Scenario: Check out a shopcart that does not exist clears the old shopcart
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "Shopcart ID" to "0"
+    And I press the "Checkout" button
+    Then I should see the message "could not be found"
+    And the "Shopcart ID" field should contain "0"
+    And the "User ID" field should be empty
+    And the "Status" field should be empty
+
+Scenario: Cannot create a shopcart with a User ID that is not a whole number
+    When I visit the "Home Page"
+    And I set the "User ID" to "1e2"
+    And I press the "Create" button
+    Then I should see the message "user_id must be an integer"
+    And the "Shopcart ID" field should be empty
+
+Scenario: Cannot update a shopcart with a User ID that is not a whole number
+    When I visit the "Home Page"
+    And I set the "User ID" to "101"
+    And I press the "Search" button
+    Then I should see the message "Success"
+    When I set the "User ID" to "0x10"
+    And I press the "Update" button
+    Then I should see the message "user_id must be an integer"
+    When I press the "List" button
+    Then I should see the message "Success"
+    And I should see "101" in the results
+    And I should not see "16" in the results
