@@ -1,0 +1,13 @@
+# PipelineTask fragment: insert under cd-pipeline.spec.tasks once deploy exists.
+# This is not a standalone Kubernetes resource; do not apply this file directly.
+name: bdd
+runAfter:
+  - deploy
+taskRef:
+  name: behave
+params:
+  - name: BASE_URL
+    value: $(params.BASE_URL)
+workspaces:
+  - name: source
+    workspace: pipeline-workspace
