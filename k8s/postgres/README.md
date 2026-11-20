@@ -24,21 +24,17 @@ Reuse an existing healthy cluster; do not delete it to rerun this demo. The targ
 uses port 8080 inside the Dev Container, so resolve any port conflict first.
 All commands below explicitly target context `k3d-nyu-devops`, namespace `default`.
 
-## Create the password Secret once
+## The password Secret
 
-Check whether the Secret already exists:
-
-```bash
-kubectl --context k3d-nyu-devops -n default get secret postgres-secret
-```
-
-Only if it reports `NotFound`, generate a local password without printing or
-committing it:
+`make deploy` creates `postgres-secret` with a random password the first time it
+runs (#91). To create it without deploying, for example before applying only
+`k8s/postgres/`, run:
 
 ```bash
-kubectl --context k3d-nyu-devops -n default create secret generic postgres-secret \
-  --from-literal=POSTGRES_PASSWORD="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+make secrets
 ```
+
+It doesn't print the password, and it never replaces a Secret that already exists.
 
 The StatefulSet reads `POSTGRES_PASSWORD` with `secretKeyRef`. Do not put real
 passwords or a placeholder Secret manifest in Git: `make deploy` recursively
@@ -70,9 +66,8 @@ development and CI database version. Its data lives on the PVC, not the Pod's
 temporary filesystem. This is a single-instance development database, not an HA
 deployment or backup solution.
 
-`make deploy` also discovers these manifests. If using that target, first verify
-your current context/namespace and create the Secret there; it may also deploy
-other components added in future stories.
+`make deploy` also discovers these manifests. It creates the Secrets in your current
+context/namespace, so verify those first; it also deploys the Shopcarts service.
 
 ## Verify the acceptance criteria
 
