@@ -45,7 +45,7 @@ fi
 
 # Never apply credentials or access grants. Those are provisioned separately by #65.
 kinds=$(oc create --dry-run=client --validate=false --recursive -f "$manifest_dir" \
-    -o 'jsonpath={.kind}{"\n"}{range .items[*]}{.kind}{"\n"}{end}')
+    -o 'go-template={{.kind}}{{"\n"}}{{range .items}}{{.kind}}{{"\n"}}{{end}}')
 if printf '%s\n' "$kinds" | grep -Eq '^(Secret|Role|RoleBinding|ClusterRole|ClusterRoleBinding|ServiceAccount|Namespace)$'; then
     fail "Keep Secrets and access configuration outside the deploy manifests"
 fi

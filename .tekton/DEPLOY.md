@@ -5,16 +5,20 @@ manifests with the digest produced by the build, then waits up to 300 seconds fo
 `deployment/shopcarts` to become Ready. Any rendering, apply, or rollout error
 fails the task.
 
-## Integration dependencies
+## Runnable release and full CD integration
 
-The current #57/#99 pipeline contains only `init`. The deploy task is provided as
-[an integration fragment](integration/deploy-task.yaml) until the build task (#66)
-and the OpenShift deployment prerequisites (#65) exist. Do not apply this fragment
-as a Kubernetes resource or add it to an active pipeline with a missing `build`
-task. A draft that defines a missing dependency does not constitute a successful
-end-to-end PipelineRun.
+The executable `shopcarts-release` Pipeline in `release-pipeline.yaml` accepts a
+real, previously built image digest and the matching source workspace. Follow the
+[post-build release guide](RELEASE.md) for prerequisites and the start command.
+It uses this deployment script and the installed `openshift-client` Task without
+clearing the workspace or requiring an unfinished build stage.
 
-After the dependencies are ready:
+The full `cd-pipeline` from #57/#99 still contains only `init`. Its
+[deployment integration fragment](integration/deploy-task.yaml) is ready to wire
+after the build task (#66) exists. The fragment is not a standalone Kubernetes
+resource. The OpenShift deployment prerequisites (#65) are needed by both paths.
+
+To integrate automatic build-to-deploy execution after those dependencies are ready:
 
 1. Confirm the pipeline's build task is called `build` and exposes the
    `IMAGE_DIGEST` result from the pushed image. Adjust the fragment's task/result
@@ -32,8 +36,8 @@ After the dependencies are ready:
    required namespace permissions. This script neither creates credentials nor
    changes RBAC. `k8s/deployment.yaml` must name both the Deployment and application
    container as `APP_NAME` (currently `shopcarts`).
-5. Apply the top-level Tekton resources with `oc apply -f .tekton/` and run the
-   pipeline as described in the main README. Do not use recursive apply on the
+5. Apply the top-level Tekton resources with `oc apply -f .tekton/` and start the
+   completed `cd-pipeline`. Do not use recursive apply on the
    `.tekton/integration/` examples.
 
 ## Deployment behavior
@@ -56,9 +60,9 @@ Postgres through its existing init container, then the task waits for the
 Deployment's readiness probes to succeed.
 
 The catalog Task accepts a shell `SCRIPT`; it does not expose arbitrary argument
-or environment parameters. The fragment therefore treats its script and the
-pipeline's application/image parameters as trusted pipeline configuration, and
-its digest as output of the trusted build task. Do not expose these parameters as
+or environment parameters. Both pipeline bindings therefore treat the script and
+application/image parameters as trusted pipeline configuration, and the digest
+as output of a trusted build. Do not expose these parameters as
 unvalidated, free-form input from an untrusted webhook. The shell script's syntax
 checks validate its received arguments; they do not make Tekton's earlier textual
 substitution into `SCRIPT` safe for arbitrary shell text.
@@ -77,9 +81,14 @@ credentials/access manifests are rejected, and render/apply/rollout failures
 propagate. These tests use a fake `oc`; they do not prove OpenShift permissions,
 image pull access, or cluster readiness.
 
-The final integration check on the team's OpenShift project is a PipelineRun
+Run `shopcarts-release` to validate deployment of an existing image and verify
+that the Deployment uses the supplied digest and completes its rollout. A denied
+apply or failed rollout must fail the run.
+
+The final full-CD integration check on the team's OpenShift project is a PipelineRun
 whose build pushes an image digest, whose deploy task updates the Deployment to
 that digest, and whose rollout succeeds. A denied apply or failed rollout must
-mark the run Failed and prevent the downstream BDD task from running.
+mark the run Failed and prevent the downstream BDD task from running. A post-build
+release run alone does not verify automatic ordering after #66's build stage.
 
 Reference: [Red Hat openshift-client task and cluster resolver](https://docs.redhat.com/en/documentation/red_hat_openshift_pipelines/1.21/html/creating_cicd_pipelines/remote-pipelines-tasks-resolvers).

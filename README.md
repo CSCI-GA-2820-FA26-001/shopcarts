@@ -344,10 +344,13 @@ bash k8s/verify.sh
 - `workspace.yaml`: the `pipeline-pvc` PersistentVolumeClaim that every task shares
 - `pipeline.yaml`: the `cd-pipeline` Pipeline, with the params `GIT_REPO`, `GIT_REF`, `APP_NAME`, `IMAGE_NAME` and `BASE_URL`, and the `pipeline-workspace` workspace
 - `tasks.yaml`: our custom tasks that aren't on Tekton Hub
+- `release-pipeline.yaml`: the separately runnable `shopcarts-release` Pipeline for an already built image and its matching source checkout
 
-Each task is added by its own story, so the pipeline grows one task at a time. For now it only has `init`, which empties the workspace because the PVC keeps the files of the last run.
+Follow the [post-build release guide](.tekton/RELEASE.md) to run the implemented release stages using a real image digest and a populated source workspace. It explains the required cluster setup, inputs, and execution command.
 
-To apply the files and start a run from your OpenShift project:
+The full `cd-pipeline` grows one task at a time through separate stories. It currently contains only `init`, which empties the shared workspace. A successful run of this skeleton means initialization succeeded; clone, lint, unit-test, and build stages still need integration. Do not run it against a PVC being used by `shopcarts-release`.
+
+To apply the manifests and exercise the initialization-only skeleton from your OpenShift project:
 
 ```bash
 oc apply -f .tekton/

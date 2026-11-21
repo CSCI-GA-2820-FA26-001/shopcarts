@@ -1,0 +1,43 @@
+# Post-build deployment of an existing image and its matching source workspace.
+# The complete clone/lint/test/build CD pipeline is maintained separately.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: shopcarts-release
+spec:
+  description: Deploy a previously built Shopcarts image by its immutable digest.
+  params:
+    - name: APP_NAME
+      type: string
+      default: shopcarts
+      description: Deployment and application container name.
+    - name: IMAGE_NAME
+      type: string
+      description: Full image name used by the completed build, including registry.
+    - name: IMAGE_DIGEST
+      type: string
+      description: Actual sha256 digest of the image pushed by that build.
+  workspaces:
+    - name: pipeline-workspace
+      description: Source checkout matching the built image; this pipeline does not clear it.
+  tasks:
+    - name: deploy
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: openshift-client
+          - name: namespace
+            value: openshift-pipelines
+      params:
+        - name: SCRIPT
+          value: |
+            #!/bin/sh
+            set -eu
+            cd /workspace/manifest_dir
+            sh .tekton/scripts/deploy.sh '$(params.APP_NAME)' '$(params.IMAGE_NAME)' '$(params.IMAGE_DIGEST)'
+      workspaces:
+        - name: manifest_dir
+          workspace: pipeline-workspace
