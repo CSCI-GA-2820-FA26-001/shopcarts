@@ -1,4 +1,4 @@
-# Deploy integration validation
+# Deploy and BDD integration validation
 
 Validated on November 21, 2026 using a disposable K3D Kubernetes v1.31.5 cluster
 and Tekton Pipelines v1.0.0. The image was built from the repository Dockerfile
@@ -12,7 +12,11 @@ into a test-only namespace with temporary credentials and namespace-scoped acces
 | Read the Deployment's actual container image | Matched the pushed repository and SHA-256 digest exactly |
 | Deploy with a mismatched `APP_NAME` | Deploy failed before apply |
 | Same failure with downstream BDD configured | PipelineRun failed; BDD was skipped and no BDD TaskRun was created |
-| Repository checks | Flake8 passed; Pylint 10.00/10; 160 unit tests passed; service coverage 98.78% |
+| Run the combined `release-success-v2` PipelineRun | Deploy and BDD both succeeded; 18 scenarios and 186 steps passed |
+| Inspect TaskRun start/completion timestamps | BDD started after deploy completed successfully |
+| Browser task security context | Ran with nonroot UID `1000600000`, using the course Selenium image |
+| Add an intentional failing scenario only to the disposable source PVC | Deploy succeeded, BDD exited nonzero, and `release-bdd-failure` was Failed; the existing 18 scenarios passed |
+| Combined-branch repository checks | Flake8 passed; Pylint 10.00/10; 166 unit tests passed; service coverage 98.78% |
 
 The real multi-manifest run exposed a bug in the old JSONPath kind scan that the
 mocked `oc` tests did not catch. A Go-template now handles individual resources

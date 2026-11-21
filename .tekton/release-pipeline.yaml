@@ -1,11 +1,11 @@
-# Post-build deployment of an existing image and its matching source workspace.
+# Post-build deployment and acceptance testing of an existing image and matching source.
 # The complete clone/lint/test/build CD pipeline is maintained separately.
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: shopcarts-release
 spec:
-  description: Deploy a previously built Shopcarts image by its immutable digest.
+  description: Deploy a previously built Shopcarts image by digest, then run browser acceptance tests.
   params:
     - name: APP_NAME
       type: string
@@ -17,6 +17,9 @@ spec:
     - name: IMAGE_DIGEST
       type: string
       description: Actual sha256 digest of the image pushed by that build.
+    - name: BASE_URL
+      type: string
+      description: HTTP or HTTPS Route URL of the isolated test deployment.
   workspaces:
     - name: pipeline-workspace
       description: Source checkout matching the built image; this pipeline does not clear it.
@@ -40,4 +43,15 @@ spec:
             sh .tekton/scripts/deploy.sh '$(params.APP_NAME)' '$(params.IMAGE_NAME)' '$(params.IMAGE_DIGEST)'
       workspaces:
         - name: manifest_dir
+          workspace: pipeline-workspace
+    - name: bdd
+      runAfter:
+        - deploy
+      taskRef:
+        name: behave
+      params:
+        - name: BASE_URL
+          value: $(params.BASE_URL)
+      workspaces:
+        - name: source
           workspace: pipeline-workspace

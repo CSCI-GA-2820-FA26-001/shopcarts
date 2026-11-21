@@ -14,13 +14,29 @@ are under `/tmp`. The Task does not require root or change `HOME`.
 between scenarios. `BASE_URL` must identify that deployment's HTTP/HTTPS Route,
 not a shared demo or production instance.
 
-## Integration status
+## Run deploy followed by BDD
 
-The pipeline skeleton in #99 currently contains only `init`. Deploy (#100) relies
-on the OpenShift manifests/Route (#65) and build task (#66). This change therefore
-does not insert a reference to a missing `deploy` task into the active pipeline.
-The BDD Task can be reviewed and tested independently; complete pipeline execution
-remains blocked on those dependencies.
+The executable `shopcarts-release` Pipeline runs `deploy`, then `bdd`. BDD starts
+only after deployment succeeds; a failed scenario fails the PipelineRun. Follow
+the [post-build release guide](RELEASE.md) for cluster prerequisites, the matching
+image/source inputs, and the `tkn pipeline start` command.
+
+Apply the Task and executable Pipeline:
+
+```sh
+oc apply -f .tekton/tasks.yaml -f .tekton/release-pipeline.yaml
+```
+
+The shared workspace must already contain the source revision used to build the
+image, including `.tekton/scripts/run-bdd.sh`, the lockfile, and the feature suite.
+The Pipeline's `BASE_URL` must point to that deployment's isolated test Route.
+
+## Full CD integration
+
+The separate `cd-pipeline` skeleton in #99 still contains only `init`. The
+post-build release path does not implement the remaining clone, lint, unit-test,
+and build stories. Automatic build-to-deploy-to-BDD execution requires those
+upstream stages and the OpenShift deployment prerequisites (#65).
 
 After clone, build, and deploy have been integrated:
 
