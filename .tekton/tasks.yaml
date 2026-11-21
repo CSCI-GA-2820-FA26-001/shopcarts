@@ -1,2 +1,25 @@
-# Custom tasks for cd-pipeline that aren't on Tekton Hub.
-# Each task story adds its own task here, separated by "---".
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: behave
+spec:
+  description: Run the browser acceptance tests against the deployed Shopcarts service.
+  params:
+    - name: BASE_URL
+      type: string
+      description: HTTP or HTTPS Route URL of the isolated test deployment.
+  workspaces:
+    - name: source
+      description: Cloned Shopcarts repository, including Pipfile.lock and features.
+      readOnly: true
+  steps:
+    - name: behave
+      image: quay.io/rofrano/pipeline-selenium:sp26
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: BASE_URL
+          value: $(params.BASE_URL)
+      command:
+        - /bin/sh
+      args:
+        - .tekton/scripts/run-bdd.sh
