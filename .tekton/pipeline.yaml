@@ -63,3 +63,18 @@ spec:
               echo "Removing the files of the last run from $(workspaces.source.path)"
               find "$(workspaces.source.path)" -mindepth 1 -delete
               ls -la "$(workspaces.source.path)"
+    # Clones the source code into the workspace for the tasks after it
+    - name: clone
+      runAfter:
+        - init
+      taskRef:
+        kind: Task
+        name: clone-source
+      params:
+        - name: url
+          value: $(params.GIT_REPO)
+        - name: revision
+          value: $(params.GIT_REF)
+      workspaces:
+        - name: output
+          workspace: pipeline-workspace

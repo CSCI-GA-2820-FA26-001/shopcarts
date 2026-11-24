@@ -1,2 +1,65 @@
 # Custom tasks for cd-pipeline that aren't on Tekton Hub.
 # Each task story adds its own task here, separated by "---".
+---
+# Clones a Git repository into a workspace (#61). It is a small equivalent of
+# git-clone from Tekton Hub and uses the same names for what it has. It doesn't
+# set a user ID, so that OpenShift can choose the one it runs as.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clone-source
+spec:
+  description: Clones a Git repository into the root of the output workspace
+  params:
+    - name: url
+      description: The URL of the Git repository to clone
+      type: string
+    - name: revision
+      description: The branch, tag or full commit SHA to check out
+      type: string
+  workspaces:
+    - name: output
+      description: The workspace to clone into; init must have emptied it
+  results:
+    - name: commit
+      description: The SHA of the commit that was checked out
+    - name: url
+      description: The URL that was cloned
+  steps:
+    - name: clone
+      image: ghcr.io/tektoncd-catalog/git-clone:v1.1.0
+      workingDir: $(workspaces.output.path)
+      env:
+        # Passed as variables so that their values are never run as shell code
+        - name: URL
+          value: $(params.url)
+        - name: REVISION
+          value: $(params.revision)
+        # Fail instead of asking for a password if the repository isn't public
+        - name: GIT_TERMINAL_PROMPT
+          value: "0"
+        # The volume may belong to another user than the one this runs as
+        - name: GIT_CONFIG_COUNT
+          value: "1"
+        - name: GIT_CONFIG_KEY_0
+          value: safe.directory
+        - name: GIT_CONFIG_VALUE_0
+          value: $(workspaces.output.path)
+      script: |
+        #!/bin/sh
+        set -eu
+        # Let the later tasks, which may run as other users, change the files
+        umask 002
+        if [ -z "$URL" ] || [ -z "$REVISION" ]; then
+          echo "Both the repository URL and the revision are required" >&2
+          exit 1
+        fi
+        git init --quiet .
+        git remote add -- origin "$URL"
+        git fetch --depth 1 --no-tags -- origin "$REVISION"
+        git checkout --quiet --detach FETCH_HEAD
+        COMMIT="$(git rev-parse HEAD)"
+        printf "%s" "$COMMIT" > "$(results.commit.path)"
+        printf "%s" "$URL" > "$(results.url.path)"
+        echo "Checked out $REVISION at $COMMIT"
+        ls -la
