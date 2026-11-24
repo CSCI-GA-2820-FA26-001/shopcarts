@@ -88,3 +88,13 @@ spec:
       workspaces:
         - name: source
           workspace: pipeline-workspace
+    # Runs the unit tests with coverage, in parallel with lint (#58)
+    - name: tests
+      runAfter:
+        - clone
+      taskRef:
+        kind: Task
+        name: tests
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace

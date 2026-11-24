@@ -349,7 +349,8 @@ Each task is added by its own story, so the pipeline grows one task at a time. S
 
 1. `init`: empties the workspace, because the PVC keeps the files of the last run
 2. `clone`: clones `GIT_REPO` at `GIT_REF` into the root of the workspace (#61). It uses our `clone-source` task from `tasks.yaml`, so there is nothing to install from Tekton Hub
-3. `lint`: installs the dev dependencies of `Pipfile.lock` and runs `make lint` (Flake8 and Pylint) on the cloned source code (#62). It runs right after `clone`, in parallel with the unit tests once #58 adds them
+3. `lint`: installs the dev dependencies of `Pipfile.lock` and runs `make lint` (Flake8 and Pylint) on the cloned source code (#62). It runs right after `clone`, in parallel with `tests`
+4. `tests`: runs `make test` on the cloned source code against a Postgres 15 sidecar (#58). It also starts right after `clone`, so it runs at the same time as `lint`
 
 To apply the files and start a run from your OpenShift project:
 
@@ -387,6 +388,14 @@ tkn pipelinerun logs --last -t lint
 ```
 
 Any Flake8 or Pylint finding fails `lint` and the run. The build (#66) has to list `lint` in its `runAfter`, so that a lint failure also stops the build and the deployment. To try a failure, push a branch with an unused import and start a run with `-p GIT_REF=<branch>`.
+
+To see the results of the unit tests of the last run:
+
+```bash
+tkn pipelinerun logs --last -t tests
+```
+
+`tests` runs the same command as CI, `make test`, so a failed test or a coverage below 95% fails the task and the run. The tests use a `postgres:15-alpine` sidecar in the same pod, with the `testdb` database on `localhost:5432`, so they need no Secret and leave no data behind. Like `lint`, the task gets the workspace read-only and writes its virtual environment, `.coverage` and caches to `/tmp`. To try a failure, push a branch with a broken assertion and start a run with `-p GIT_REF=<branch>`; `tests` fails and the tasks after it are skipped.
 
 ## Project Structure
 
