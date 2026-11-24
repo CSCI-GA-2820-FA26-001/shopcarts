@@ -351,6 +351,7 @@ Each task is added by its own story, so the pipeline grows one task at a time. S
 2. `clone`: clones `GIT_REPO` at `GIT_REF` into the root of the workspace (#61). It uses our `clone-source` task from `tasks.yaml`, so there is nothing to install from Tekton Hub
 3. `lint`: installs the dev dependencies of `Pipfile.lock` and runs `make lint` (Flake8 and Pylint) on the cloned source code (#62). It runs right after `clone`, in parallel with `tests`
 4. `tests`: runs `make test` on the cloned source code against a Postgres 15 sidecar (#58). It also starts right after `clone`, so it runs at the same time as `lint`
+5. `build`: builds the `Dockerfile` from the cloned source code with the `buildah` task of OpenShift Pipelines and pushes the image to `IMAGE_NAME` (#66). It runs only when both `lint` and `tests` pass
 
 To apply the files and start a run from your OpenShift project:
 
@@ -396,6 +397,21 @@ tkn pipelinerun logs --last -t tests
 ```
 
 `tests` runs the same command as CI, `make test`, so a failed test or a coverage below 95% fails the task and the run. The tests use a `postgres:15-alpine` sidecar in the same pod, with the `testdb` database on `localhost:5432`, so they need no Secret and leave no data behind. Like `lint`, the task gets the workspace read-only and writes its virtual environment, `.coverage` and caches to `/tmp`. To try a failure, push a branch with a broken assertion and start a run with `-p GIT_REF=<branch>`; `tests` fails and the tasks after it are skipped.
+
+To check the image of the last run:
+
+```bash
+tkn pipelinerun describe --last         # the IMAGE_DIGEST and IMAGE_URL results
+tkn pipelinerun logs --last -t build
+oc get imagestream shopcarts            # the new image, tagged latest
+oc get istag shopcarts:latest -o jsonpath='{.image.metadata.name}'   # the same digest
+```
+
+`build` uses the `buildah` Task that OpenShift Pipelines installs in the `openshift-pipelines` namespace, through the cluster resolver, so there is nothing to install. Check that it is there with `oc get task buildah -n openshift-pipelines`. With `IMAGE_NAME` set to `image-registry.openshift-image-registry.svc:5000/$(oc project -q)/shopcarts:latest`, it pushes to the internal registry of your own project, and the registry creates the `shopcarts` ImageStream on the first push. The `pipeline` ServiceAccount that runs the tasks can already push to its own project, so no push Secret is needed.
+
+The pipeline returns the `IMAGE_DIGEST` and `IMAGE_URL` results of `build`. The deploy task (#100) reads the digest as `$(tasks.build.results.IMAGE_DIGEST)` and deploys that exact image instead of the `latest` tag.
+
+If `lint` or `tests` fails, `build` is skipped and no image is pushed. If the Dockerfile doesn't build, `build` and the run fail and the tasks after it are skipped.
 
 ## Project Structure
 
