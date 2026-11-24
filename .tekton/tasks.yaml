@@ -63,3 +63,41 @@ spec:
         printf "%s" "$URL" > "$(results.url.path)"
         echo "Checked out $REVISION at $COMMIT"
         ls -la
+---
+# Runs Flake8 and Pylint on the cloned source code (#62). The workspace is
+# read-only, so it can run in parallel with the unit tests (#58).
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: lint
+spec:
+  description: Runs make lint and fails if it finds any problem
+  workspaces:
+    - name: source
+      description: The workspace with the cloned source code at its root
+      readOnly: true
+  steps:
+    - name: lint
+      image: quay.io/rofrano/pipeline-selenium:sp26
+      workingDir: $(workspaces.source.path)
+      env:
+        # Keep every file that the tools write out of the workspace
+        - name: HOME
+          value: /tmp/lint
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+        - name: PIPENV_DONT_LOAD_ENV
+          value: "1"
+        - name: PIPENV_NOSPIN
+          value: "1"
+        # Hide the notice that Pipenv uses the virtual environment below
+        - name: PIPENV_VERBOSITY
+          value: "-1"
+      script: |
+        #!/bin/sh
+        set -eu
+        python3 -m venv "$HOME/venv"
+        . "$HOME/venv/bin/activate"
+        # --deploy fails if Pipfile.lock is out of date, and never changes it
+        pipenv install --dev --deploy
+        make lint
