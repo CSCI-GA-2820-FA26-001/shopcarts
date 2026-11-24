@@ -345,7 +345,10 @@ bash k8s/verify.sh
 - `pipeline.yaml`: the `cd-pipeline` Pipeline, with the params `GIT_REPO`, `GIT_REF`, `APP_NAME`, `IMAGE_NAME` and `BASE_URL`, and the `pipeline-workspace` workspace
 - `tasks.yaml`: our custom tasks that aren't on Tekton Hub
 
-Each task is added by its own story, so the pipeline grows one task at a time. For now it only has `init`, which empties the workspace because the PVC keeps the files of the last run.
+Each task is added by its own story, so the pipeline grows one task at a time. So far it has:
+
+1. `init`: empties the workspace, because the PVC keeps the files of the last run
+2. `clone`: clones `GIT_REPO` at `GIT_REF` into the root of the workspace (#61). It uses our `clone-source` task from `tasks.yaml`, so there is nothing to install from Tekton Hub
 
 To apply the files and start a run from your OpenShift project:
 
@@ -360,6 +363,21 @@ tkn pipelinerun list
 ```
 
 `GIT_REPO`, `GIT_REF` and `APP_NAME` default to this repository, `master` and `shopcarts`. Without `--use-param-defaults`, `tkn` asks for each of them. After changing a file in `.tekton/`, run `oc apply -f .tekton/` again before the next run.
+
+`GIT_REF` can be a branch, a tag or a full commit SHA (not a short one). The repository must be public, because the pipeline has no Git credentials. To build another branch, add `-p GIT_REF=<branch>` to the command.
+
+To check the clone of the last run:
+
+```bash
+tkn pipelinerun describe --last        # init and clone succeeded
+tkn pipelinerun logs --last -t clone
+```
+
+The log ends with the commit that was checked out and the files of the repository. Compare the commit with `git ls-remote https://github.com/CSCI-GA-2820-FA26-001/shopcarts.git master`.
+
+To check that a bad repository or revision stops the pipeline, start a run with `-p GIT_REF=no-such-branch` or `-p GIT_REPO=https://github.com/CSCI-GA-2820-FA26-001/no-such-repo.git`. `clone` and the run both fail, and the tasks that run after `clone` are skipped.
+
+A later task reads the source code with `runAfter: [clone]` and `pipeline-workspace` bound to its own workspace. The repository is at the root of that workspace. The commit is available to it as `$(tasks.clone.results.commit)`.
 
 ## Project Structure
 
