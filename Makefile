@@ -71,7 +71,8 @@ import: ## Import the image into the local K3D cluster
 .PHONY: deploy
 deploy: ## Deploy the service on local Kubernetes
 	$(info Deploying service locally...)
-	kubectl apply -R -f k8s/
+	# k8s/route.yaml is for OpenShift only: K3D has no Route kind and uses the Ingress
+	kubectl apply -f k8s/postgres/ -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/ingress.yaml
 
 ############################################################
 # COMMANDS FOR BUILDING THE IMAGE

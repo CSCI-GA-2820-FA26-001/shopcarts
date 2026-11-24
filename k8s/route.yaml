@@ -1,0 +1,18 @@
+# OpenShift only: gives the shopcarts Service a public HTTPS URL (#65).
+# K3D uses ingress.yaml instead, so `make deploy` doesn't apply this file.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: shopcarts
+  labels:
+    app: shopcarts
+    app.kubernetes.io/part-of: shopcarts
+spec:
+  to:
+    kind: Service
+    name: shopcarts
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

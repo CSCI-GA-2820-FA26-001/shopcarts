@@ -6,6 +6,8 @@ These manifests deploy the Shopcarts service to the K3D cluster:
   readiness and liveness probes on `/health`
 - `service.yaml`: a ClusterIP Service on port 8080
 - `ingress.yaml`: routes `http://localhost:8080` to the Service through Traefik
+- `route.yaml`: OpenShift only, gives the Service a public HTTPS URL (#65). `make deploy`
+  doesn't apply it; see [OpenShift](../README.md#openshift) for the `oc` commands
 
 The database is the Postgres StatefulSet in [`postgres/`](postgres/README.md) (#38).
 
@@ -25,7 +27,7 @@ add `127.0.0.1 cluster-registry` to `/etc/hosts`.
 ## 2. Create the Secrets once
 
 The service reads its credentials from two Secrets. Neither is in Git, because
-`make deploy` applies every YAML file under `k8s/`.
+`make deploy` applies the YAML files under `k8s/`.
 
 `postgres-secret` holds the database password. If it doesn't exist yet, create it
 as described in [`postgres/README.md`](postgres/README.md#create-the-password-secret-once).
