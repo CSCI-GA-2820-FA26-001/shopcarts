@@ -78,3 +78,13 @@ spec:
       workspaces:
         - name: output
           workspace: pipeline-workspace
+    # Checks the source code, in parallel with the unit tests (#58)
+    - name: lint
+      runAfter:
+        - clone
+      taskRef:
+        kind: Task
+        name: lint
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
