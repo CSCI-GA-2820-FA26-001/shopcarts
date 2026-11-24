@@ -1,0 +1,12 @@
+# Takes the repository and the pushed commit from the GitHub push event (#76)
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: cd-binding
+spec:
+  params:
+    - name: git-repo-url
+      value: $(body.repository.clone_url)
+    # The SHA of the pushed commit, so the run builds exactly that revision
+    - name: git-revision
+      value: $(body.after)

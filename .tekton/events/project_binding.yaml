@@ -1,0 +1,13 @@
+# The values of cd-pipeline that depend on the OpenShift project (#76).
+# Don't apply this file as it is: replace <project> and <route-host> first,
+# as the README shows.
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: cd-project-binding
+spec:
+  params:
+    - name: image-name
+      value: image-registry.openshift-image-registry.svc:5000/<project>/shopcarts:latest
+    - name: base-url
+      value: https://<route-host>

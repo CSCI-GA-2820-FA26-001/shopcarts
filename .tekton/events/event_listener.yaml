@@ -1,0 +1,35 @@
+# Receives the GitHub webhook and starts cd-pipeline for each push to master (#76).
+# The github interceptor rejects any request that isn't signed with the webhook
+# secret, and the cel interceptor drops pushes to other branches and repositories.
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: cd-listener
+spec:
+  serviceAccountName: pipeline
+  triggers:
+    - name: push-to-master
+      interceptors:
+        - ref:
+            name: github
+          params:
+            - name: secretRef
+              value:
+                secretName: github-webhook-secret
+                secretKey: secretToken
+            - name: eventTypes
+              value:
+                - push
+        - ref:
+            name: cel
+          params:
+            - name: filter
+              value: >-
+                body.ref == 'refs/heads/master' &&
+                body.repository.full_name == 'CSCI-GA-2820-FA26-001/shopcarts' &&
+                !body.deleted
+      bindings:
+        - ref: cd-binding
+        - ref: cd-project-binding
+      template:
+        ref: cd-template
