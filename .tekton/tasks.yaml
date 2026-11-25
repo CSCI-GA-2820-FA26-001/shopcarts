@@ -101,3 +101,89 @@ spec:
         # --deploy fails if Pipfile.lock is out of date, and never changes it
         pipenv install --dev --deploy
         make lint
+---
+# Runs the unit tests on the cloned source code against a Postgres sidecar
+# (#58). It fails if a test fails or if the coverage is below 95%, the same as
+# CI. The workspace is read-only, so it can run in parallel with lint (#62).
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: tests
+spec:
+  description: Runs make test against a Postgres sidecar and fails on any failed test or low coverage
+  workspaces:
+    - name: source
+      description: The workspace with the cloned source code at its root
+      readOnly: true
+  sidecars:
+    # The same database as CI. The sidecar shares the pod's network with the
+    # step, so the tests reach it on localhost.
+    - name: postgres
+      image: postgres:15-alpine
+      env:
+        - name: POSTGRES_PASSWORD
+          value: postgres
+        - name: POSTGRES_DB
+          value: testdb
+        # Keep the data out of the image's volume, which may not be writable
+        # by the random user that OpenShift picks
+        - name: PGDATA
+          value: /tmp/pgdata
+      readinessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -h
+            - 127.0.0.1
+            - -U
+            - postgres
+            - -d
+            - testdb
+        periodSeconds: 2
+        timeoutSeconds: 3
+  steps:
+    - name: pytest
+      image: quay.io/rofrano/pipeline-selenium:sp26
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: DATABASE_URI
+          value: postgresql+psycopg://postgres:postgres@localhost:5432/testdb
+        # Keep every file that the tools write out of the workspace
+        - name: HOME
+          value: /tmp/tests
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+        - name: COVERAGE_FILE
+          value: /tmp/tests/.coverage
+        - name: PYTEST_ADDOPTS
+          value: -p no:cacheprovider
+        - name: PIPENV_DONT_LOAD_ENV
+          value: "1"
+        - name: PIPENV_NOSPIN
+          value: "1"
+        - name: PIPENV_VERBOSITY
+          value: "-1"
+      script: |
+        #!/bin/sh
+        set -eu
+        python3 -m venv "$HOME/venv"
+        . "$HOME/venv/bin/activate"
+        # --deploy fails if Pipfile.lock is out of date, and never changes it
+        pipenv install --dev --deploy
+        # Tekton starts the step once the sidecar is ready, but wait for the
+        # database anyway, because the tests fail on the first refused connection
+        python3 - <<'PY'
+        import os, sys, time
+        import psycopg
+        url = os.environ["DATABASE_URI"].replace("postgresql+psycopg://", "postgresql://")
+        for _ in range(30):
+            try:
+                psycopg.connect(url).close()
+                print("Postgres is ready")
+                sys.exit(0)
+            except psycopg.OperationalError:
+                time.sleep(2)
+        sys.exit("Postgres did not start within 60 seconds")
+        PY
+        # Same command as CI: any failed test or coverage below 95% fails the task
+        make test
