@@ -337,6 +337,48 @@ make deploy
 bash k8s/verify.sh
 ```
 
+## OpenShift
+
+The same manifests deploy the service and Postgres to an OpenShift project (#65). On OpenShift, `k8s/route.yaml` gives the service a public HTTPS URL in place of the K3D Ingress. `make deploy` doesn't apply it, because K3D has no Route kind.
+
+Run these from the repository root after `oc login`, in your own project:
+
+```bash
+oc project <your-project>
+
+# 1. The Secrets, once per project. Nothing is printed and no password is committed.
+#    Keep an existing postgres-secret: Postgres keeps the password it was first started with.
+oc get secret postgres-secret || oc create secret generic postgres-secret   --from-literal=POSTGRES_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_hex(24))')"
+oc get secret shopcarts-secret || oc create secret generic shopcarts-secret   --from-literal=SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex())')"
+
+# 2. Build the Dockerfile in the cluster and push the image to the project's internal registry.
+#    The build image task of the CD pipeline (#66) automates this step.
+oc get bc shopcarts || oc new-build --name shopcarts --binary --strategy docker
+oc start-build shopcarts --from-dir . --follow
+
+# 3. Postgres, the service and its Route
+oc apply -f k8s/postgres/ -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/route.yaml
+oc set image deployment/shopcarts   shopcarts=image-registry.openshift-image-registry.svc:5000/$(oc project -q)/shopcarts:latest
+
+# 4. Check the acceptance criteria
+oc get pods -l app.kubernetes.io/part-of=shopcarts
+bash k8s/verify-openshift.sh
+```
+
+The Deployment builds `DATABASE_URI` from `postgres-secret` and reads `SECRET_KEY` from `shopcarts-secret`, so the same two Secrets work on K3D and OpenShift. It listens on 8080 and uses `/health` for its liveness and readiness probes.
+
+`k8s/verify-openshift.sh` checks that the shopcarts and postgres pods are Ready, that `GET /health` through the Route returns `{"status": "OK"}`, and that a shopcart created through the Route can still be read after the postgres pod is deleted and comes back. It deletes the shopcart it creates. All `PASS` messages must appear and the script must exit with status 0.
+
+To get the Route URL, for example for `BASE_URL` of the CD pipeline:
+
+```bash
+echo "https://$(oc get route shopcarts -o jsonpath='{.spec.host}')"
+```
+
+OpenShift runs every container with a random user ID instead of the one in the image. The entrypoint of `postgres:15-alpine` is written for this: it creates `PGDATA`, a subdirectory of the volume that OpenShift makes writable for the pod, and runs `initdb` as that user. If `postgres-0` crashes instead, start with `oc logs postgres-0`. If `oc start-build` is refused because Docker builds aren't allowed in your project, build and push with `docker` or `podman` to the registry's public route instead (`oc registry info --public`).
+
+To redeploy after a change, run `oc start-build shopcarts --from-dir . --follow` and `oc rollout restart deployment/shopcarts`.
+
 ## Project Structure
 
 ```text
