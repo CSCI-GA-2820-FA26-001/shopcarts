@@ -413,6 +413,46 @@ The pipeline returns the `IMAGE_DIGEST` and `IMAGE_URL` results of `build`. The 
 
 If `lint` or `tests` fails, `build` is skipped and no image is pushed. If the Dockerfile doesn't build, `build` and the run fail and the tasks after it are skipped.
 
+### Run the pipeline on every push to master
+
+`.tekton/events/` starts `cd-pipeline` automatically when GitHub sends a push event for `master` (#76):
+
+- `event_listener.yaml`: the `cd-listener` EventListener. Its `github` interceptor rejects any request that isn't signed with the webhook secret, and its `cel` interceptor drops pushes to other branches, to other repositories, and branch deletions
+- `trigger_binding.yaml`: `cd-binding` takes the repository URL and the SHA of the pushed commit (`after`) from the event, so the run builds exactly that commit
+- `project_binding.yaml`: `cd-project-binding` holds `IMAGE_NAME` and `BASE_URL`, which depend on the project
+- `trigger_template.yaml`: `cd-template` creates the PipelineRun on the shared `pipeline-pvc` workspace
+- `route.yaml`: the public HTTPS URL of the EventListener, for the webhook
+
+Set it up once per project, after `oc apply -f .tekton/` and the Route of the service (see [OpenShift](#openshift)):
+
+```bash
+# The secret that GitHub signs each webhook request with
+oc get secret github-webhook-secret || oc create secret generic github-webhook-secret   --from-literal=secretToken="$(python3 -c 'import secrets; print(secrets.token_hex(20))')"
+
+oc apply -f .tekton/events/
+# project_binding.yaml has placeholders, so apply it again with the values of this project
+sed -e "s|<project>|$(oc project -q)|"     -e "s|<route-host>|$(oc get route shopcarts -o jsonpath='{.spec.host}')|"     .tekton/events/project_binding.yaml | oc apply -f -
+
+oc get eventlistener cd-listener          # wait until AVAILABLE is True
+echo "https://$(oc get route el-cd-listener -o jsonpath='{.spec.host}')"
+oc get secret github-webhook-secret -o jsonpath='{.data.secretToken}' | base64 -d; echo
+```
+
+Then add the webhook in GitHub, which needs Admin access to the repository: **Settings > Webhooks > Add webhook**, with the EventListener URL above as the Payload URL, `application/json` as the Content type, the secret above as the Secret, and **Just the push event**. GitHub shows a green check next to each delivery that the EventListener accepted.
+
+To check the trigger without pushing, send a signed push event yourself:
+
+```bash
+bash .tekton/events/send-test-push.sh master        # starts a run of the current master commit
+bash .tekton/events/send-test-push.sh some-branch   # starts nothing
+tkn pipelinerun list
+tkn pipelinerun describe --last                     # GIT_REF is the pushed SHA
+```
+
+A request without the right signature gets an error back and starts nothing. If a push starts no run, look at `oc logs deployment/el-cd-listener`.
+
+All the runs share `pipeline-pvc`, so two pushes to master in a row start two runs on the same workspace. Wait for the first run to finish, or cancel it with `tkn pipelinerun cancel`, before pushing again.
+
 ## Project Structure
 
 ```text
