@@ -29,6 +29,13 @@ spec:
   workspaces:
     - name: pipeline-workspace
       description: The shared workspace (pipeline-pvc) that holds the source code
+  results:
+    - name: IMAGE_DIGEST
+      description: The digest of the image that build pushed
+      value: $(tasks.build.results.IMAGE_DIGEST)
+    - name: IMAGE_URL
+      description: The full name of the image that build pushed
+      value: $(tasks.build.results.IMAGE_URL)
   tasks:
     # Empties the workspace, which keeps the files of the last run,
     # and shows what this run will build
@@ -95,6 +102,33 @@ spec:
       taskRef:
         kind: Task
         name: tests
+      workspaces:
+        - name: source
+          workspace: pipeline-workspace
+    # Builds the Dockerfile and pushes the image to IMAGE_NAME (#66), only
+    # when both lint and tests pass. The deploy task (#100) deploys the exact
+    # image with $(tasks.build.results.IMAGE_DIGEST).
+    - name: build
+      runAfter:
+        - lint
+        - tests
+      taskRef:
+        # The buildah Task that ships with OpenShift Pipelines
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: namespace
+            value: openshift-pipelines
+      params:
+        - name: IMAGE
+          value: $(params.IMAGE_NAME)
+        - name: DOCKERFILE
+          value: ./Dockerfile
+        - name: CONTEXT
+          value: .
       workspaces:
         - name: source
           workspace: pipeline-workspace
